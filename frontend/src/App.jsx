@@ -5,6 +5,7 @@ import MainLayout from './layouts/MainLayout';
 import Profile from './pages/Profile';
 import EditProfile from './pages/EditProfile';
 import ManageSocials from './pages/ManageSocials';
+import Upload from './pages/Upload';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/profile/:id" element={<Profile />} />
           <Route path="/edit-profile" element={<EditProfile />} />
           <Route path="/social-links" element={<ManageSocials />} />
+          <Route path="/upload" element={<Upload />} />
           {/* Feed and Events will go here */}
         </Route>
 
