@@ -38,50 +38,53 @@ export default function Feed() {
       {posts.map(post => (
         <article key={post.id} className="neo-container glass-panel overflow-hidden">
           {/* Post Header */}
-          <div className="p-4 border-b-2 border-black flex items-center justify-between">
+          <div className="p-4 border-b-2 border-black flex items-center justify-between bg-black/20">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-neon-pink rounded-full border-2 border-black flex items-center justify-center font-black">
+              <div className="w-10 h-10 bg-neon-lime text-black rounded-full border-2 border-black flex items-center justify-center font-black italic shadow-[2px_2px_0_black]">
                 {post.profile_pic ? (
                   <img src={post.profile_pic} alt="" className="w-full h-full object-cover rounded-full" />
                 ) : (
                   <span>{post.username[0]}</span>
                 )}
               </div>
-              <Link to={`/profile/${post.username}`} className="font-heading font-black hover:text-neon-lime">
-                {post.username}
+              <Link to={`/profile/${post.username}`} className="font-heading font-black italic tracking-tighter hover:text-neon-pink transition-colors">
+                {post.username.toUpperCase()}
               </Link>
             </div>
-            <span className="text-sm text-gray-400">
+            <span className="text-[10px] font-mono text-neon-lime bg-black px-2 py-1 border border-neon-lime/30">
               {new Date(post.created_at).toLocaleDateString()}
             </span>
           </div>
 
           {/* Post Media */}
-          <div className="border-b-2 border-black bg-black aspect-square flex items-center justify-center">
+          <div className="border-b-2 border-black bg-black aspect-video flex items-center justify-center relative overflow-hidden group">
             {post.media_type === 'image' ? (
-              <img src={post.media_url} alt="Post" className="w-full h-full object-cover" />
+              <img src={post.media_url} alt="Post" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
             ) : (
               <video src={post.media_url} controls className="w-full h-full object-contain" />
             )}
+            <div className="absolute top-2 right-2 bg-neon-pink text-black text-[10px] font-black px-2 py-1 rotate-3 border-2 border-black">
+              LIVE_NOW
+            </div>
           </div>
 
           {/* Post Actions & Caption */}
-          <div className="p-4">
+          <div className="p-4 bg-black/40">
             <div className="flex gap-4 mb-4">
-              <button className="hover:text-neon-pink transition-colors flex items-center gap-1">
-                <Heart size={24} /> <span className="font-mono text-sm">{post.likes}</span>
+              <button className="hover:text-neon-pink transition-all flex items-center gap-1 group">
+                <Heart size={24} className="group-hover:fill-neon-pink" /> <span className="font-mono text-xs">{post.likes}</span>
               </button>
-              <button className="hover:text-neon-lime transition-colors flex items-center gap-1">
-                <MessageSquare size={24} /> <span className="font-mono text-sm">{post.comments}</span>
+              <button className="hover:text-neon-lime transition-all flex items-center gap-1 group">
+                <MessageSquare size={24} className="group-hover:fill-neon-lime" /> <span className="font-mono text-xs">{post.comments}</span>
               </button>
               <button className="hover:text-neon-lime transition-colors ml-auto">
                 <Share2 size={24} />
               </button>
             </div>
             
-            <div>
-              <span className="font-heading font-black mr-2">{post.username}</span>
-              <span>{post.caption}</span>
+            <div className="text-sm">
+              <span className="font-heading font-black italic text-neon-pink mr-2">@{post.username.toLowerCase()}</span>
+              <span className="text-gray-200">{post.caption}</span>
             </div>
           </div>
         </article>
