@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-neon-lime: #bef264;
+  --color-neon-pink: #f472b6;
+  --color-base-dark: #18181b;
+  --font-heading: "Cabinet Grotesk", sans-serif;
+  --font-body: "Satoshi", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-fixed text-white font-body;
+    background: linear-gradient(135deg, #7c3aed, #db2777, #f59e0b);
+    background-attachment: fixed;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-black italic tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/10 backdrop-blur-md border border-white/25 shadow-[4px_4px_0_black];
+  }
+  .neo-container {
+    @apply border-4 border-black bg-base-dark shadow-[4px_4px_0_black];
+  }
+  .neo-button {
+    @apply bg-neon-lime text-black font-heading font-black italic px-4 py-2 border-2 border-black shadow-[4px_4px_0_black] transition-transform hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none;
+  }
+}
