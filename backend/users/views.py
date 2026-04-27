@@ -16,3 +16,8 @@ class CurrentUserView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+class UserDetailView(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = (permissions.AllowAny,)
