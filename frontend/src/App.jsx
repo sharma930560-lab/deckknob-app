@@ -7,6 +7,8 @@ import EditProfile from './pages/EditProfile';
 import ManageSocials from './pages/ManageSocials';
 import Upload from './pages/Upload';
 import Feed from './pages/Feed';
+import CreateEvent from './pages/CreateEvent';
+import TodayEvents from './pages/TodayEvents';
 
 function App() {
   return (
@@ -22,6 +24,8 @@ function App() {
           <Route path="/edit-profile" element={<EditProfile />} />
           <Route path="/social-links" element={<ManageSocials />} />
           <Route path="/upload" element={<Upload />} />
+          <Route path="/create-event" element={<CreateEvent />} />
+          <Route path="/events/today" element={<TodayEvents />} />
           {/* Events will go here */}
         </Route>
 

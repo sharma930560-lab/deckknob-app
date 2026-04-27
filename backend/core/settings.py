@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'users',
     'social_links',
     'posts',
+    'events',
 ]
 
 MIDDLEWARE = [
