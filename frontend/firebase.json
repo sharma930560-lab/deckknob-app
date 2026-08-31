@@ -3,7 +3,10 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": {
-    "rules": "storage.rules"
-  }
+  "storage": [
+    {
+      "bucket": "deckknob-684f7.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ]
 }

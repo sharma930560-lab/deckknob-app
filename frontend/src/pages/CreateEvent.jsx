@@ -46,16 +46,16 @@ export default function CreateEvent() {
         bannerUrl = await storageService.uploadEventBanner(user.uid, bannerFile);
       }
       
-      await eventService.createEvent(
-        user.uid,
-        user.username,
+      await eventService.createEvent({
+        authorId: user.uid,
+        username: user.username,
         title,
         venue,
         dateTime,
         website,
         description,
-        bannerUrl
-      );
+        image: bannerUrl
+      });
       
       showToast('Event published successfully!', 'success');
       navigate('/events/today');

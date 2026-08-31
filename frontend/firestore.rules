@@ -11,80 +11,189 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // ── Diagnostic Connection Test ─────────────────────────
+    match /testConnection/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
     // ── Users ─────────────────────────────────────────────
     match /users/{uid} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
-      allow delete: if false;
+      allow update: if isOwner(uid) || isAuthenticated();
+      allow delete: if isOwner(uid);
     }
 
     // ── Usernames (lookup table) ───────────────────────────
     match /usernames/{username} {
       allow read: if true;
       allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
     // ── Posts ─────────────────────────────────────────────
     match /posts/{postId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+
+      // Post comments subcollection
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+        allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      }
     }
 
-    // ── Reels ─────────────────────────────────────────────
+    // ── Reels / Klyps ──────────────────────────────────────
     match /reels/{reelId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+        allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      }
     }
 
     // ── Likes ─────────────────────────────────────────────
     match /likes/{likeId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
-    // ── Saved Posts ───────────────────────────────────────
+    // ── Saved Posts / Bookmarks ───────────────────────────
     match /savedPosts/{saveId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
-    // ── Comments ──────────────────────────────────────────
-    match /comments/{commentId} {
+    // ── Stories & Story Features ───────────────────────────
+    match /stories/{storyId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /storyTags/{tagId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /storyReplies/{replyId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
-    // ── Stories ───────────────────────────────────────────
-    match /stories/{storyId} {
+    match /storyHighlights/{highlightId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /storyAnalytics/{storyId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow write: if isAuthenticated();
+    }
+
+    match /storyViews/{viewId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
 
     // ── Events ────────────────────────────────────────────
     match /events/{eventId} {
       allow read: if true;
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
-    // ── Follows ───────────────────────────────────────────
-    match /follows/{followId} {
-      allow read: if isAuthenticated();
+    // ── Following & Followers ──────────────────────────────
+    match /following/{userId}/userFollowing/{targetId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /followers/{userId}/userFollowers/{targetId} {
+      allow read: if true;
       allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    match /follows/{followId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
     // ── Notifications ─────────────────────────────────────
     match /notifications/{notifId} {
-      allow read: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.recipientId == request.auth.uid
+      );
+      allow write: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.recipientId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.recipientId == request.auth.uid
+      );
+    }
+
+    // ── Chats & Messages ───────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+        allow update: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+        allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // ── Mentions, Music, Reviews, CheckIns, Hashtags ───────
+    match /mentions/{mentionId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /music/{musicId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /venueReviews/{reviewId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /checkIns/{checkInId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /hashtags/{tagId} {
+      allow read: if true;
       allow write: if isAuthenticated();
     }
   }

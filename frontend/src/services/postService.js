@@ -17,6 +17,19 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 
+function parseTimestampMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === 'number') return ts;
+  if (typeof ts === 'string') {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  return 0;
+}
+
 export const postService = {
   createPost: async (currentUid, username, avatar, role, mediaUrl, mediaType, caption, options = {}) => {
     try {
@@ -32,23 +45,30 @@ export const postService = {
         authorId: currentUid,
         authorUsername: username,
         authorAvatar: avatar || '',
-        authorRole: role || 'fan',
+        authorRole: role || 'dj',
         media_url: mediaUrl,
-        media_type: mediaType, // 'image' | 'video'
+        mediaUrl: mediaUrl,
+        media_type: mediaType || 'image', // 'image' | 'video'
+        mediaType: mediaType || 'image',
         caption: caption || '',
         likes_count: 0,
         comments_count: 0,
         taggedUsers: options.taggedUsers || [],
         mentionedUsernames,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
       
       await setDoc(newPostRef, postData);
       
       // Update user posts count
-      await updateDoc(doc(db, 'users', currentUid), {
-        postsCount: increment(1)
-      });
+      try {
+        await updateDoc(doc(db, 'users', currentUid), {
+          postsCount: increment(1)
+        });
+      } catch (err) {
+        console.warn('[postService] Could not increment postsCount on user:', err);
+      }
 
       // Index mentions for notification lookup
       if (options.taggedUsers && options.taggedUsers.length > 0) {
@@ -56,8 +76,8 @@ export const postService = {
           try {
             await addDoc(collection(db, 'mentions'), {
               postId: newPostRef.id,
-              mentionedUid: tagged.uid,
-              mentionedUsername: tagged.username,
+              mentionedUid: tagged.uid || '',
+              mentionedUsername: tagged.username || '',
               authorId: currentUid,
               authorUsername: username,
               type: 'post',
@@ -74,50 +94,66 @@ export const postService = {
     }
   },
 
-
   getFeedPosts: async (currentUid, lastDocSnapshot = null, limitCount = 10) => {
     try {
-      let q = query(
-        collection(db, 'posts'),
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
-      
-      if (lastDocSnapshot) {
+      let q;
+      try {
         q = query(
           collection(db, 'posts'),
           orderBy('createdAt', 'desc'),
-          startAfter(lastDocSnapshot),
           limit(limitCount)
         );
+        if (lastDocSnapshot) {
+          q = query(
+            collection(db, 'posts'),
+            orderBy('createdAt', 'desc'),
+            startAfter(lastDocSnapshot),
+            limit(limitCount)
+          );
+        }
+      } catch {
+        q = query(collection(db, 'posts'), limit(limitCount));
       }
       
-      const snapshot = await getDocs(q);
+      let snapshot;
+      try {
+        snapshot = await getDocs(q);
+      } catch (indexError) {
+        console.warn('[postService] Falling back to unindexed query:', indexError);
+        snapshot = await getDocs(query(collection(db, 'posts'), limit(limitCount)));
+      }
+
       const posts = [];
       
       for (const postDoc of snapshot.docs) {
         const data = postDoc.data();
         const postId = postDoc.id;
         
-        // Check if current user liked it
         let isLiked = false;
         let isBookmarked = false;
         
         if (currentUid) {
-          const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
-          const likeSnap = await getDoc(likeRef);
-          isLiked = likeSnap.exists();
-          
-          const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
-          const saveSnap = await getDoc(saveRef);
-          isBookmarked = saveSnap.exists();
+          try {
+            const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+            const likeSnap = await getDoc(likeRef);
+            isLiked = likeSnap.exists();
+            
+            const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
+            const saveSnap = await getDoc(saveRef);
+            isBookmarked = saveSnap.exists();
+          } catch { /* non-fatal */ }
         }
         
+        const mediaUrl = data.media_url || data.mediaUrl || '';
+        const mediaType = data.media_type || data.mediaType || 'image';
+
         posts.push({
           id: postId,
-          media_url: data.media_url,
-          media_type: data.media_type,
-          caption: data.caption,
+          media_url: mediaUrl,
+          mediaUrl: mediaUrl,
+          media_type: mediaType,
+          mediaType: mediaType,
+          caption: data.caption || '',
           likes_count: data.likes_count ?? 0,
           comments_count: data.comments_count ?? 0,
           is_liked: isLiked,
@@ -125,13 +161,19 @@ export const postService = {
           createdAt: data.createdAt,
           user: {
             id: data.authorId,
-            username: data.authorUsername,
-            profile_pic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername}&background=DFE104&color=000&bold=true`,
-            role: data.authorRole
+            username: data.authorUsername || 'selector',
+            profile_pic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername || 'U'}&background=DFE104&color=000&bold=true`,
+            profilePic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername || 'U'}&background=DFE104&color=000&bold=true`,
+            role: data.authorRole || 'dj'
           },
-          docSnapshot: postDoc // Store for cursor pagination
+          docSnapshot: postDoc
         });
       }
+
+      // Sort client-side
+      posts.sort((a, b) => {
+        return parseTimestampMillis(b.createdAt) - parseTimestampMillis(a.createdAt);
+      });
       
       return posts;
     } catch (e) {
@@ -140,29 +182,39 @@ export const postService = {
     }
   },
 
-  getUserPosts: async (username, currentUid) => {
+  getUserPosts: async (usernameOrUid, currentUid) => {
     try {
-      // Find user UID first by username
-      const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase().trim()));
-      if (!usernameDoc.exists()) return [];
-      const uid = usernameDoc.data().uid;
+      if (!usernameOrUid) return [];
+
+      let targetUid = usernameOrUid;
+
+      // Check if usernameOrUid is a UID in users table
+      const userDirectSnap = await getDoc(doc(db, 'users', usernameOrUid));
+      if (!userDirectSnap.exists()) {
+        // Look up by username
+        const usernameDoc = await getDoc(doc(db, 'usernames', usernameOrUid.toLowerCase().trim()));
+        if (usernameDoc.exists()) {
+          targetUid = usernameDoc.data().uid;
+        }
+      }
 
       let snapshot;
       try {
         const q = query(
           collection(db, 'posts'),
-          where('authorId', '==', uid),
+          where('authorId', '==', targetUid),
           orderBy('createdAt', 'desc')
         );
         snapshot = await getDocs(q);
       } catch (indexError) {
-        console.warn('Firebase index still building, falling back to client-side sort for posts.');
+        console.warn('[postService] Fallback to author query:', indexError);
         const fallbackQ = query(
           collection(db, 'posts'),
-          where('authorId', '==', uid)
+          where('authorId', '==', targetUid)
         );
         snapshot = await getDocs(fallbackQ);
       }
+
       const posts = [];
       
       for (const postDoc of snapshot.docs) {
@@ -173,20 +225,27 @@ export const postService = {
         let isBookmarked = false;
         
         if (currentUid) {
-          const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
-          const likeSnap = await getDoc(likeRef);
-          isLiked = likeSnap.exists();
-          
-          const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
-          const saveSnap = await getDoc(saveRef);
-          isBookmarked = saveSnap.exists();
+          try {
+            const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+            const likeSnap = await getDoc(likeRef);
+            isLiked = likeSnap.exists();
+            
+            const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
+            const saveSnap = await getDoc(saveRef);
+            isBookmarked = saveSnap.exists();
+          } catch { /* non-fatal */ }
         }
         
+        const mediaUrl = data.media_url || data.mediaUrl || '';
+        const mediaType = data.media_type || data.mediaType || 'image';
+
         posts.push({
           id: postId,
-          media_url: data.media_url,
-          media_type: data.media_type,
-          caption: data.caption,
+          media_url: mediaUrl,
+          mediaUrl: mediaUrl,
+          media_type: mediaType,
+          mediaType: mediaType,
+          caption: data.caption || '',
           likes_count: data.likes_count ?? 0,
           comments_count: data.comments_count ?? 0,
           is_liked: isLiked,
@@ -196,6 +255,7 @@ export const postService = {
             id: data.authorId,
             username: data.authorUsername,
             profile_pic: data.authorAvatar,
+            profilePic: data.authorAvatar,
             role: data.authorRole
           }
         });
@@ -203,9 +263,7 @@ export const postService = {
       
       // Client-side sort fallback
       posts.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis() || 0;
-        const timeB = b.createdAt?.toMillis() || 0;
-        return timeB - timeA;
+        return parseTimestampMillis(b.createdAt) - parseTimestampMillis(a.createdAt);
       });
       
       return posts;
@@ -274,8 +332,8 @@ export const postService = {
       const q = query(commentsRef, orderBy('createdAt', 'asc'));
       const snapshot = await getDocs(q);
       const comments = [];
-      snapshot.forEach((doc) => {
-        comments.push({ id: doc.id, ...doc.data() });
+      snapshot.forEach((docSnap) => {
+        comments.push({ id: docSnap.id, ...docSnap.data() });
       });
       return comments;
     } catch (e) {
@@ -306,6 +364,22 @@ export const postService = {
       return { id: commentDocRef.id, ...commentData };
     } catch (e) {
       console.error('[postService] addComment error:', e);
+      throw e;
+    }
+  },
+
+  deletePost: async (postId, currentUid) => {
+    try {
+      const postRef = doc(db, 'posts', postId);
+      const postSnap = await getDoc(postRef);
+      if (postSnap.exists() && postSnap.data().authorId === currentUid) {
+        await deleteDoc(postRef);
+        await updateDoc(doc(db, 'users', currentUid), {
+          postsCount: increment(-1)
+        });
+      }
+    } catch (e) {
+      console.error('[postService] deletePost error:', e);
       throw e;
     }
   }

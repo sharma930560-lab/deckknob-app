@@ -53,10 +53,10 @@ export default function Explore() {
   const exploreTiles = useMemo(() => {
     const tiles = [];
     (trending.posts || []).forEach(post => {
-      tiles.push({ id: `post-${post.id}`, image: post.media_url, label: post.user?.username || '', isReel: false });
+      tiles.push({ id: `post-${post.id}`, image: post.media_url || post.mediaUrl, label: post.user?.username || '', isReel: false });
     });
     (trending.reels || []).forEach(reel => {
-      tiles.push({ id: `reel-${reel.id}`, image: reel.poster || reel.media_url, label: reel.user?.username || '', isReel: true });
+      tiles.push({ id: `reel-${reel.id}`, image: reel.poster || reel.media_url || reel.mediaUrl, label: reel.user?.username || '', isReel: true });
     });
     return tiles;
   }, [trending]);

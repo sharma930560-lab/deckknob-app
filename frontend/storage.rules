@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Helper
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -13,7 +13,7 @@ service firebase.storage {
 
     function isValidImage() {
       return request.resource.contentType.matches('image/.*')
-          && request.resource.size < 10 * 1024 * 1024; // 10 MB max
+          && request.resource.size < 25 * 1024 * 1024; // 25 MB max
     }
 
     function isValidVideo() {
@@ -21,34 +21,49 @@ service firebase.storage {
           && request.resource.size < 500 * 1024 * 1024; // 500 MB max
     }
 
-    // ── User profile photos ───────────────────────────────
+    function isValidMedia() {
+      return isValidImage() || isValidVideo() || request.resource.contentType.matches('audio/.*');
+    }
+
+    // ── Diagnostic Connection Test ─────────────────────────
+    match /testConnection/{uid}/{fileName} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ── User profile & cover photos ────────────────────────
     match /users/{uid}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+      allow write: if isOwner(uid) && isValidMedia();
     }
 
     // ── Post media (images/videos) ────────────────────────
     match /posts/{uid}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+      allow write: if isOwner(uid) && isValidMedia();
     }
 
     // ── Reel videos ───────────────────────────────────────
     match /reels/{uid}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(uid) && isValidVideo();
+      allow write: if isOwner(uid) && (isValidVideo() || isValidImage());
     }
 
     // ── Story media ───────────────────────────────────────
     match /stories/{uid}/{fileName} {
       allow read: if true;
-      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+      allow write: if isOwner(uid) && isValidMedia();
     }
 
-    // ── Event banners ─────────────────────────────────────
+    // ── Event banners & media ─────────────────────────────
     match /events/{uid}/{fileName} {
       allow read: if true;
-      allow write: if isAuthenticated() && isValidImage();
+      allow write: if isAuthenticated() && isValidMedia();
+    }
+
+    // ── General user uploads / fallback ───────────────────
+    match /uploads/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(uid) && isValidMedia();
     }
   }
 }

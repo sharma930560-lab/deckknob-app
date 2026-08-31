@@ -16,6 +16,19 @@ import {
   addDoc
 } from 'firebase/firestore';
 
+function parseTimestampMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === 'number') return ts;
+  if (typeof ts === 'string') {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  return 0;
+}
+
 export const storyService = {
   // Create Story with overlays, tags, location, scheduled time, and music
   createStory: async (currentUid, username, avatar, mediaUrl, mediaType = 'image', options = {}) => {
@@ -29,7 +42,9 @@ export const storyService = {
         authorUsername: username,
         authorAvatar: avatar || '',
         media_url: mediaUrl,
-        media_type: mediaType,
+        mediaUrl: mediaUrl,
+        media_type: mediaType || 'image',
+        mediaType: mediaType || 'image',
         viewers: [],
         createdAt: serverTimestamp(),
         expiresAt: options.scheduledTime 
@@ -40,40 +55,45 @@ export const storyService = {
         scheduledTime: options.scheduledTime || null,
         
         // Stickers, text overlays, tags, and music metadata
-        overlays: options.overlays || [], // Draggable/resizable text/stickers
+        overlays: options.overlays || [],
         tags: options.tags || [],
         location: options.location || null,
-        music: options.music || null, // { title, artist, audioUrl, startTime, duration }
+        music: options.music || null,
         filter: options.filter || 'Original',
-        adjustments: options.adjustments || {}
+        adjustments: options.adjustments || {},
+        caption: options.caption || ''
       };
       
       await setDoc(newStoryRef, storyData);
 
       // Track story creation in analytics
-      const analyticsRef = doc(db, 'storyAnalytics', newStoryRef.id);
-      await setDoc(analyticsRef, {
-        storyId: newStoryRef.id,
-        authorId: currentUid,
-        views: 0,
-        reach: 0,
-        replies: 0,
-        shares: 0,
-        stickerClicks: 0,
-        musicClicks: 0,
-        linkClicks: 0,
-        createdAt: serverTimestamp()
-      });
+      try {
+        const analyticsRef = doc(db, 'storyAnalytics', newStoryRef.id);
+        await setDoc(analyticsRef, {
+          storyId: newStoryRef.id,
+          authorId: currentUid,
+          views: 0,
+          reach: 0,
+          replies: 0,
+          shares: 0,
+          stickerClicks: 0,
+          musicClicks: 0,
+          linkClicks: 0,
+          createdAt: serverTimestamp()
+        });
+      } catch { /* non-critical */ }
 
       // Save tags and mentions to dedicated indexes
       if (options.tags && options.tags.length > 0) {
         for (const taggedUser of options.tags) {
-          await addDoc(collection(db, 'storyTags'), {
-            storyId: newStoryRef.id,
-            userId: taggedUser.uid || taggedUser.id,
-            username: taggedUser.username,
-            createdAt: serverTimestamp()
-          });
+          try {
+            await addDoc(collection(db, 'storyTags'), {
+              storyId: newStoryRef.id,
+              userId: taggedUser.uid || taggedUser.id,
+              username: taggedUser.username,
+              createdAt: serverTimestamp()
+            });
+          } catch { /* non-critical */ }
         }
       }
 
@@ -87,33 +107,50 @@ export const storyService = {
   // Get active feed stories
   getActiveStories: async (currentUid) => {
     try {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const q = query(
-        collection(db, 'stories'),
-        where('createdAt', '>=', oneDayAgo),
-        where('isDraft', '==', false),
-        orderBy('createdAt', 'desc')
-      );
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      let snapshot;
+
+      try {
+        const q = query(
+          collection(db, 'stories'),
+          orderBy('createdAt', 'desc')
+        );
+        snapshot = await getDocs(q);
+      } catch (indexErr) {
+        console.warn('[storyService] Falling back to unindexed stories query:', indexErr);
+        snapshot = await getDocs(collection(db, 'stories'));
+      }
       
-      const snapshot = await getDocs(q);
       const userGroupsMap = {};
       
       snapshot.forEach((storyDoc) => {
         const data = storyDoc.data();
+        if (data.isDraft) return;
+
+        const createdMillis = parseTimestampMillis(data.createdAt);
+        // Exclude stories older than 24h if timestamp is present
+        if (createdMillis > 0 && createdMillis < oneDayAgo) return;
+
         const authorId = data.authorId;
         const viewers = data.viewers || [];
         const isSeen = currentUid ? viewers.includes(currentUid) : false;
         
+        const mediaUrl = data.media_url || data.mediaUrl || '';
+        const mediaType = data.media_type || data.mediaType || 'image';
+
         const storyObj = {
           id: storyDoc.id,
-          media_url: data.media_url,
-          media_type: data.media_type || 'image',
+          media_url: mediaUrl,
+          mediaUrl: mediaUrl,
+          media_type: mediaType,
+          mediaType: mediaType,
           is_seen: isSeen,
           overlays: data.overlays || [],
           location: data.location || null,
           music: data.music || null,
           filter: data.filter || 'Original',
           adjustments: data.adjustments || {},
+          caption: data.caption || '',
           createdAt: data.createdAt
         };
         
@@ -121,8 +158,8 @@ export const storyService = {
           userGroupsMap[authorId] = {
             user: {
               id: authorId,
-              username: data.authorUsername,
-              profile_pic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername}&background=DFE104&color=000&bold=true`
+              username: data.authorUsername || 'selector',
+              profile_pic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername || 'U'}&background=DFE104&color=000&bold=true`
             },
             stories: [],
             has_unseen: false
@@ -133,7 +170,8 @@ export const storyService = {
       });
       
       const groups = Object.values(userGroupsMap).map((group) => {
-        group.stories.reverse();
+        // Sort oldest to newest within user's active story reel
+        group.stories.sort((a, b) => parseTimestampMillis(a.createdAt) - parseTimestampMillis(b.createdAt));
         group.has_unseen = group.stories.some((s) => !s.is_seen);
         return group;
       });
@@ -151,12 +189,10 @@ export const storyService = {
       if (!currentUid) return;
       const storyRef = doc(db, 'stories', storyId);
       
-      // Update viewers list in main story document
       await updateDoc(storyRef, {
         viewers: arrayUnion(currentUid)
       });
 
-      // Record view detailed document
       const viewId = `${storyId}_${currentUid}`;
       const viewRef = doc(db, 'storyViews', viewId);
       const viewSnap = await getDoc(viewRef);
@@ -168,12 +204,13 @@ export const storyService = {
           viewedAt: serverTimestamp()
         });
 
-        // Increment view counts on analytics
-        const analyticsRef = doc(db, 'storyAnalytics', storyId);
-        await updateDoc(analyticsRef, {
-          views: increment(1),
-          reach: increment(1)
-        }).catch(() => {});
+        try {
+          const analyticsRef = doc(db, 'storyAnalytics', storyId);
+          await updateDoc(analyticsRef, {
+            views: increment(1),
+            reach: increment(1)
+          });
+        } catch { /* non-critical */ }
       }
     } catch (e) {
       console.error('[storyService] markStorySeen error:', e);
@@ -194,11 +231,12 @@ export const storyService = {
       };
       const replyDoc = await addDoc(repliesRef, replyData);
       
-      // Increment reply counter in analytics
-      const analyticsRef = doc(db, 'storyAnalytics', storyId);
-      await updateDoc(analyticsRef, {
-        replies: increment(1)
-      }).catch(() => {});
+      try {
+        const analyticsRef = doc(db, 'storyAnalytics', storyId);
+        await updateDoc(analyticsRef, {
+          replies: increment(1)
+        });
+      } catch { /* non-critical */ }
 
       return { id: replyDoc.id, ...replyData };
     } catch (e) {
@@ -230,15 +268,25 @@ export const storyService = {
 
   getHighlights: async (userId) => {
     try {
-      const q = query(
-        collection(db, 'storyHighlights'),
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
-      );
-      const snap = await getDocs(q);
+      let snap;
+      try {
+        const q = query(
+          collection(db, 'storyHighlights'),
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc')
+        );
+        snap = await getDocs(q);
+      } catch {
+        const fallbackQ = query(
+          collection(db, 'storyHighlights'),
+          where('userId', '==', userId)
+        );
+        snap = await getDocs(fallbackQ);
+      }
+
       const highlights = [];
-      snap.forEach((doc) => {
-        highlights.push(doc.data());
+      snap.forEach((docSnap) => {
+        highlights.push(docSnap.data());
       });
       return highlights;
     } catch (e) {
@@ -250,17 +298,25 @@ export const storyService = {
   // Get archived stories (expired stories owned by current user)
   getStoriesArchive: async (currentUid) => {
     try {
-      const q = query(
-        collection(db, 'stories'),
-        where('authorId', '==', currentUid),
-        orderBy('createdAt', 'desc')
-      );
-      const snap = await getDocs(q);
+      let snap;
+      try {
+        const q = query(
+          collection(db, 'stories'),
+          where('authorId', '==', currentUid),
+          orderBy('createdAt', 'desc')
+        );
+        snap = await getDocs(q);
+      } catch {
+        const fallbackQ = query(
+          collection(db, 'stories'),
+          where('authorId', '==', currentUid)
+        );
+        snap = await getDocs(fallbackQ);
+      }
+
       const archive = [];
-      snap.forEach((doc) => {
-        const data = doc.data();
-        // Return if older than 24 hours or explicitly archived
-        archive.push(data);
+      snap.forEach((docSnap) => {
+        archive.push(docSnap.data());
       });
       return archive;
     } catch (e) {

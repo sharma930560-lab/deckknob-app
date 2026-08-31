@@ -298,7 +298,16 @@ export default function CreatorWorkspace() {
 
       } else if (mode === 'event') {
         const downloadUrl = await storageService.uploadEventBanner(user.uid, media.file, (p) => setUploadProgress(10 + Math.round(p * 0.8)));
-        await eventService.createEvent(user.uid, eventTitle, eventVenue, eventDateTime, eventWebsite, caption, downloadUrl);
+        await eventService.createEvent({
+          authorId: user.uid,
+          username: user.username,
+          title: eventTitle,
+          venue: eventVenue,
+          dateTime: eventDateTime,
+          website: eventWebsite,
+          description: caption,
+          image: downloadUrl
+        });
         showToast('Event published successfully! 📅', 'success');
       }
 

@@ -32,7 +32,7 @@ export default function Profile() {
   const [selectedMedia, setSelectedMedia] = useState(null);
 
   const isOwnProfile = id === 'me' || (currentUser && (
-    id.toString() === currentUser.uid?.toString() || id === currentUser.username
+    id.toString() === currentUser.uid?.toString() || id.toString() === currentUser.username?.toString()
   ));
 
   // Load profile user info
@@ -42,21 +42,26 @@ export default function Profile() {
       if (isOwnProfile && currentUser) {
         setProfileUser(currentUser);
       } else {
-        const username = id === 'me' ? currentUser?.username : id;
-        if (!username) {
+        const lookupKey = id === 'me' ? currentUser?.username : id;
+        if (!lookupKey) {
           setIsLoading(false);
           return;
         }
-        const userProfile = await userService.getUserByUsername(username);
+
+        let userProfile = await userService.getUserProfile(lookupKey);
+        if (!userProfile) {
+          userProfile = await userService.getUserByUsername(lookupKey);
+        }
+
         setProfileUser(userProfile);
         
-        if (userProfile && currentUser) {
+        if (userProfile && currentUser && currentUser.uid !== userProfile.uid) {
           const following = await userService.isFollowing(currentUser.uid, userProfile.uid);
           setIsFollowing(following);
         }
       }
     } catch (e) {
-      console.error(e);
+      console.error('[Profile] loadProfile error:', e);
     } finally {
       setIsLoading(false);
     }
@@ -67,29 +72,30 @@ export default function Profile() {
   }, [loadProfile]);
 
   // Load content
-  const loadContent = useCallback(async (username) => {
-    if (!username) return;
+  const loadContent = useCallback(async (targetUid, targetUsername) => {
+    if (!targetUid && !targetUsername) return;
     setContentLoading(true);
     try {
+      const identifier = targetUid || targetUsername;
       const [posts, reels, allEvents] = await Promise.all([
-        postService.getUserPosts(username, currentUser?.uid),
-        reelService.getUserReels(username, currentUser?.uid),
+        postService.getUserPosts(identifier, currentUser?.uid),
+        reelService.getUserReels(identifier, currentUser?.uid),
         eventService.getEvents()
       ]);
       
       setUserPosts(posts);
       setUserReels(reels);
-      setUserEvents(allEvents.filter(e => e.username === username || e.authorId === profileUser?.uid));
+      setUserEvents(allEvents.filter(e => e.authorId === targetUid || e.username === targetUsername));
     } catch (e) {
-      console.error(e);
+      console.error('[Profile] loadContent error:', e);
     } finally {
       setContentLoading(false);
     }
-  }, [currentUser?.uid, profileUser?.uid]);
+  }, [currentUser?.uid]);
 
   useEffect(() => {
-    if (profileUser?.username) {
-      loadContent(profileUser.username);
+    if (profileUser) {
+      loadContent(profileUser.uid, profileUser.username);
     }
   }, [profileUser, loadContent]);
 
@@ -98,7 +104,7 @@ export default function Profile() {
       showToast('Please log in to follow other selectors.', 'warning');
       return;
     }
-    if (isFollowLoading) return;
+    if (isFollowLoading || !profileUser?.uid) return;
     setIsFollowLoading(true);
     try {
       if (isFollowing) {
@@ -119,14 +125,11 @@ export default function Profile() {
     }
   };
 
-  const handleIgConnect = () => {
-    showToast('Instagram integration is currently offline.', 'info');
-  };
-
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16 lg:px-8 text-center">
-        <p className="text-zinc-500 animate-pulse text-sm">Loading profile...</p>
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#DFE104] border-t-transparent mb-3" />
+        <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Loading selector profile...</p>
       </div>
     );
   }
@@ -134,7 +137,10 @@ export default function Profile() {
   if (!profileUser) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16 lg:px-8 text-center">
-        <p className="text-zinc-500 text-sm">User not found.</p>
+        <p className="text-zinc-400 text-sm font-bold">Selector not found.</p>
+        <Link to="/explore" className="mt-4 inline-block dk-button bg-[#DFE104] text-black text-xs font-bold px-6 py-3">
+          Explore Selectors
+        </Link>
       </div>
     );
   }
@@ -148,9 +154,9 @@ export default function Profile() {
       `https://ui-avatars.com/api/?name=${profileUser.username}&background=DFE104&color=000&bold=true&size=256`,
     bio: profileUser.bio || 'Underground selector.',
     postsCount: userPosts.length,
-    followers: profileUser.followersCount ?? 0,
-    following: profileUser.followingCount ?? 0,
-    links: profileUser.socialLinks || [],
+    followers: profileUser.followersCount ?? profileUser.followers ?? 0,
+    following: profileUser.followingCount ?? profileUser.following ?? 0,
+    links: profileUser.socialLinks || profileUser.social_links || [],
   };
 
   const activeItems =
@@ -164,32 +170,35 @@ export default function Profile() {
       <section className="flex flex-col items-center text-center sm:text-left sm:flex-row sm:items-start gap-5 sm:gap-7">
         <div className="relative shrink-0">
           <span className="story-ring-active block w-fit">
-            <img src={user.avatar} alt={user.username} className="h-28 w-28 sm:h-36 sm:w-36 rounded-full border-4 border-[#09090B] object-cover lg:h-52 lg:w-52" />
+            <img
+              src={user.avatar}
+              alt={user.username}
+              className="h-28 w-28 sm:h-36 sm:w-36 rounded-full border-4 border-[#09090B] object-cover lg:h-52 lg:w-52"
+              onError={(e) => {
+                e.currentTarget.src = `https://ui-avatars.com/api/?name=${user.username}&background=DFE104&color=000&bold=true&size=256`;
+              }}
+            />
           </span>
         </div>
 
         <div className="min-w-0 w-full">
           <div className="flex flex-col sm:flex-row flex-wrap items-center sm:items-center gap-2 sm:gap-3">
             <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-[-0.06em] lg:text-7xl break-all">{user.username}</h1>
-            {isOwnProfile && (
+            {isOwnProfile ? (
               <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                 <Link to="/edit-profile" className="dk-button bg-[#DFE104] text-black px-4 text-sm font-bold">
                   Edit Profile
+                </Link>
+                <Link to="/social-links" className="dk-button bg-white/[0.06] px-4 text-sm font-bold">
+                  <IconsaxAnimated name="link" size={18} />
+                  Socials
                 </Link>
                 <Link to="/settings" className="dk-button bg-white/[0.06] px-4 text-sm font-bold">
                   <IconsaxAnimated name="settings" size={18} />
                   Settings
                 </Link>
-                <button
-                  onClick={handleIgConnect}
-                  className="dk-button bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 text-sm font-bold gap-1.5"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                  Connect Instagram
-                </button>
               </div>
-            )}
-            {!isOwnProfile && (
+            ) : (
               <button
                 onClick={handleFollowToggle}
                 disabled={isFollowLoading}
@@ -210,10 +219,16 @@ export default function Profile() {
 
           <div className="mt-4 sm:mt-6 flex flex-wrap justify-center sm:justify-start gap-2">
             {user.links.map((link) => (
-              <Link key={link.url} to="/social-links" className="dk-button bg-[#DFE104]/10 px-3 sm:px-4 text-xs sm:text-sm font-bold text-[#DFE104]">
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="dk-button bg-[#DFE104]/10 hover:bg-[#DFE104]/20 px-3 sm:px-4 text-xs sm:text-sm font-bold text-[#DFE104] transition-colors"
+              >
                 <IconsaxAnimated name="link" size={16} />
                 {link.platform}
-              </Link>
+              </a>
             ))}
           </div>
         </div>
@@ -227,12 +242,12 @@ export default function Profile() {
             {userPosts.slice(0, 5).map((post, index) => (
               <div key={post.id} className="w-20 sm:w-24 shrink-0 text-center">
                 <img
-                  src={post.media_url}
+                  src={post.media_url || post.mediaUrl}
                   alt="Highlight"
                   className="h-16 w-16 sm:h-20 sm:w-20 rounded-full border border-white/[0.1] object-cover mx-auto"
-                  onError={(e) => { e.target.style.display = 'none'; }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
-                <p className="mt-2 text-[10px] sm:text-xs font-bold text-zinc-400">Highlight {index + 1}</p>
+                <p className="mt-2 text-[10px] sm:text-xs font-bold text-zinc-400">Set {index + 1}</p>
               </div>
             ))}
           </div>
@@ -262,61 +277,63 @@ export default function Profile() {
 
       {/* Content Grid */}
       {contentLoading ? (
-        <div className="py-16 text-center text-xs text-zinc-500 animate-pulse">Loading...</div>
+        <div className="py-16 text-center text-xs text-zinc-500 animate-pulse">Loading content...</div>
       ) : activeItems.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="text-zinc-500 text-sm">No {activeTab} yet.</p>
-          {isOwnProfile && activeTab === 'posts' && (
+          <p className="text-zinc-500 text-sm">No {activeTab} published yet.</p>
+          {isOwnProfile && (
             <Link to="/upload" className="mt-4 inline-block dk-button bg-[#DFE104] text-black px-6 text-sm font-bold">
-              + Upload your first post
+              + Upload your first {activeTab === 'reels' ? 'klyp' : activeTab === 'events' ? 'event' : 'post'}
             </Link>
           )}
         </div>
       ) : (
         <div className="mt-1 grid grid-cols-3 gap-0.5 sm:gap-1">
-          {activeItems.map((item, index) => (
-            <div key={item.id || index} onClick={() => setSelectedMedia(item)} className="relative aspect-square overflow-hidden bg-zinc-900 group cursor-pointer">
-              {activeTab === 'reels' ? (
-                <>
-                  <video
-                    src={item.media_url}
-                    className="h-full w-full object-cover"
-                    muted
-                    loop
-                    preload="metadata"
-                    onMouseEnter={e => e.target.play()}
-                    onMouseLeave={e => e.target.pause()}
-                    playsInline
+          {activeItems.map((item, index) => {
+            const mediaUrl = item.media_url || item.mediaUrl || item.image || '';
+            const isVideo = item.media_type === 'video' || item.mediaType === 'video' || activeTab === 'reels';
+
+            return (
+              <div
+                key={item.id || index}
+                onClick={() => setSelectedMedia(item)}
+                className="relative aspect-square overflow-hidden bg-zinc-900 group cursor-pointer"
+              >
+                {isVideo ? (
+                  <>
+                    <video
+                      src={mediaUrl}
+                      className="h-full w-full object-cover"
+                      muted
+                      loop
+                      preload="metadata"
+                      onMouseEnter={e => e.target.play().catch(() => {})}
+                      onMouseLeave={e => e.target.pause()}
+                      playsInline
+                    />
+                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <div className="absolute top-1.5 right-1.5">
+                      <svg className="w-4 h-4 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/></svg>
+                    </div>
+                  </>
+                ) : (
+                  <img
+                    src={mediaUrl}
+                    alt={item.caption || item.title || ''}
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={e => { e.currentTarget.src = 'https://images.unsplash.com/photo-1516873240891-4bf014598ab4?w=400'; }}
                   />
-                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                  </div>
-                  <div className="absolute top-1.5 right-1.5">
-                    <svg className="w-4 h-4 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/></svg>
-                  </div>
-                </>
-              ) : activeTab === 'events' ? (
-                <img
-                  src={item.image || item.media_url}
-                  alt={item.title}
-                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  onError={e => { e.target.src = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400'; }}
-                />
-              ) : (
-                <img
-                  src={item.media_url}
-                  alt={item.caption}
-                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  onError={e => { e.target.src = 'https://images.unsplash.com/photo-1516873240891-4bf014598ab4?w=400'; }}
-                />
-              )}
-              {/* Hover overlay */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white font-bold text-sm">
-                <span>❤ {item.likes_count ?? 0}</span>
-                {activeTab !== 'events' && <span>💬 {item.comments_count ?? 0}</span>}
+                )}
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white font-bold text-sm">
+                  <span>❤ {item.likes_count ?? 0}</span>
+                  {activeTab !== 'events' && <span>💬 {item.comments_count ?? 0}</span>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -333,6 +350,7 @@ export default function Profile() {
             <button
               onClick={() => setSelectedMedia(null)}
               className="absolute top-6 right-6 text-white hover:text-[#DFE104] transition-colors"
+              aria-label="Close modal"
             >
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -345,18 +363,17 @@ export default function Profile() {
               className="relative max-h-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl bg-black"
               onClick={e => e.stopPropagation()}
             >
-              {activeTab === 'reels' || selectedMedia.type === 'video' ? (
+              {activeTab === 'reels' || selectedMedia.media_type === 'video' || selectedMedia.mediaType === 'video' ? (
                 <video
-                  src={selectedMedia.media_url}
+                  src={selectedMedia.media_url || selectedMedia.mediaUrl}
                   className="max-h-[85vh] w-auto max-w-full"
                   controls
                   autoPlay
-                  loop
                   playsInline
                 />
               ) : (
                 <img
-                  src={selectedMedia.media_url || selectedMedia.image}
+                  src={selectedMedia.media_url || selectedMedia.mediaUrl || selectedMedia.image}
                   alt="Post content"
                   className="max-h-[85vh] w-auto max-w-full object-contain"
                 />

@@ -92,7 +92,12 @@ export default function TodayEvents({ mode = 'today' }) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8 lg:px-8">
         <div className="relative overflow-hidden rounded-2xl sm:rounded-[2rem]">
-          <img src={selected.image} alt={selected.title} className="h-[50vh] sm:h-[60vh] lg:h-[70vh] min-h-[360px] w-full object-cover" />
+          <img
+            src={selected.image || selected.media_url || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=900'}
+            alt={selected.title}
+            className="h-[50vh] sm:h-[60vh] lg:h-[70vh] min-h-[360px] w-full object-cover"
+            onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=900'; }}
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 lg:p-10">
             <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.24em] text-[#DFE104]">{selected.date} / {selected.time}</p>
@@ -102,8 +107,10 @@ export default function TodayEvents({ mode = 'today' }) {
               {selected.lineup?.length > 0 && ` Featuring ${selected.lineup.join(', ')}.`}
             </p>
             <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
-              {selected.url && (
-                <a href={selected.url} target="_blank" rel="noreferrer" className="dk-button bg-[#DFE104] px-4 sm:px-5 text-xs sm:text-sm font-black uppercase tracking-[0.12em] text-black">Visit Venue Website</a>
+              {(selected.url || selected.ticketUrl) && (
+                <a href={selected.url || selected.ticketUrl} target="_blank" rel="noreferrer" className="dk-button bg-[#DFE104] px-4 sm:px-5 text-xs sm:text-sm font-black uppercase tracking-[0.12em] text-black">
+                  Visit Venue / Ticket Website
+                </a>
               )}
               <button 
                 onClick={handleRsvp}

@@ -7,6 +7,12 @@ import IconsaxAnimated from '../components/icons/IconsaxAnimated';
 import { storageService } from '../services/storageService';
 import { useToast } from '../components/ui/Toast';
 
+const GENRES = [
+  'Techno', 'House', 'Afro House', 'Electro', 'Drum & Bass',
+  'Jungle', 'Breaks', 'Hard Groove', 'Ambient', 'Experimental',
+  'Hip-Hop', 'Trap', 'Bass Music', 'Other'
+];
+
 function useDebounce(value, delay) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -15,13 +21,17 @@ function useDebounce(value, delay) {
   }, [value, delay]);
   return debounced;
 }
+
 export default function EditProfile() {
   const { user, updateProfile, isLoading, error, clearError } = authStore();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const fileInputRef = useRef(null);
   
+  const [name, setName] = useState('');
   const [bio, setBio] = useState('');
+  const [city, setCity] = useState('');
+  const [genre, setGenre] = useState('');
   const [profilePic, setProfilePic] = useState('');
   const [username, setUsername] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
@@ -34,7 +44,10 @@ export default function EditProfile() {
   useEffect(() => {
     clearError();
     if (user) {
+      setName(user.name || '');
       setBio(user.bio || '');
+      setCity(user.city || '');
+      setGenre(user.genre || '');
       setProfilePic(user.profilePic || user.profile_pic || '');
       setUsername(user.username || '');
     }
@@ -84,8 +97,16 @@ export default function EditProfile() {
         setIsUploadingPhoto(true);
         finalPicUrl = await storageService.uploadProfilePhoto(user.uid, photoFile);
       }
-      await updateProfile({ bio, profilePic: finalPicUrl, profile_pic: finalPicUrl, username });
-      showToast('Profile updated successfully!', 'success');
+      await updateProfile({
+        name,
+        bio,
+        city,
+        genre,
+        profilePic: finalPicUrl,
+        profile_pic: finalPicUrl,
+        username,
+      });
+      showToast('Profile updated successfully! ✓', 'success');
       navigate('/profile/me');
     } catch (err) {
       showToast(err.message || 'Failed to update profile', 'error');
@@ -164,6 +185,17 @@ export default function EditProfile() {
           </div>
         </div>
         
+        {/* Display Name */}
+        <label className="block">
+          <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Stage / Display Name</span>
+          <input 
+            className="h-12 w-full rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-bold outline-none focus:border-[#DFE104] transition-colors" 
+            placeholder="e.g. DJ Horizon / Maya Beats"
+            value={name} 
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+
         {/* Username */}
         <label className="block">
           <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Username</span>
@@ -196,10 +228,34 @@ export default function EditProfile() {
               Username taken. Try: {suggestions.join(', ')}
             </div>
           )}
-          {!usernameStatus && (
-            <p className="mt-1.5 text-[10px] text-zinc-600">You can update your unique username.</p>
-          )}
         </label>
+
+        {/* City & Genre */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">City / Scene</span>
+            <input 
+              className="h-12 w-full rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm outline-none focus:border-[#DFE104] transition-colors" 
+              placeholder="e.g. Mumbai, Berlin, London"
+              value={city} 
+              onChange={(e) => setCity(e.target.value)}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Primary Genre</span>
+            <select
+              className="h-12 w-full rounded-2xl border border-white/[0.08] bg-[#18181B] px-4 text-sm text-white outline-none focus:border-[#DFE104] transition-colors"
+              value={genre}
+              onChange={(e) => setGenre(e.target.value)}
+            >
+              <option value="">Select Genre</option>
+              {GENRES.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {/* Bio */}
         <label className="block">

@@ -186,24 +186,22 @@ export default function PostCard({ post }) {
         </div>
 
         {/* Media */}
-        <button
-          type="button"
+        <div
           onDoubleClick={handleLike}
-          className="relative block w-full overflow-hidden bg-zinc-950 text-left"
+          className="relative block w-full overflow-hidden bg-zinc-950 text-left cursor-pointer"
           aria-label={`Post by ${username}`}
         >
-          {post.media_type === 'video' ? (
+          {post.media_type === 'video' || post.mediaType === 'video' ? (
             <video
-              src={post.media_url}
+              src={post.media_url || post.mediaUrl}
               className="aspect-[4/5] w-full object-cover sm:rounded-[1.75rem]"
               controls
-              muted
               playsInline
               preload="metadata"
             />
           ) : (
             <img
-              src={post.media_url}
+              src={post.media_url || post.mediaUrl}
               alt={post.caption || ''}
               className="aspect-[4/5] w-full object-cover sm:rounded-[1.75rem]"
               loading="lazy"
@@ -228,7 +226,7 @@ export default function PostCard({ post }) {
               </motion.div>
             )}
           </AnimatePresence>
-        </button>
+        </div>
 
         {/* Actions */}
         <div className="px-4 py-4 sm:px-0">

@@ -60,7 +60,7 @@ function ReelItem({ reel, index, onLike, onBookmark }) {
       {/* Video */}
       <video
         ref={videoRef}
-        src={reel.media_url}
+        src={reel.media_url || reel.mediaUrl}
         poster={reel.poster}
         className="h-full w-full object-cover"
         muted

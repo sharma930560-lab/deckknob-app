@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import MotionPage from '../components/ui/MotionPage';
 import IconsaxAnimated from '../components/icons/IconsaxAnimated';
 import authStore from '../stores/authStore';
-import { API_BASE } from '../config/api';
+import { useToast } from '../components/ui/Toast';
 
 export default function ManageSocials() {
-  const { user } = authStore();
+  const { user, updateProfile } = authStore();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [links, setLinks] = useState([]);
   const [newPlatform, setNewPlatform] = useState('');
   const [newUrl, setNewUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Instagram Sync States
   const [igUsername, setIgUsername] = useState('');
@@ -18,14 +20,34 @@ export default function ManageSocials() {
   const [syncMessage, setSyncMessage] = useState('');
 
   useEffect(() => {
-    if (user?.social_links) {
-      setLinks(user.social_links);
+    if (user?.socialLinks || user?.social_links) {
+      setLinks(user.socialLinks || user.social_links || []);
     }
   }, [user]);
 
+  const saveLinks = async (updatedLinks) => {
+    setIsSaving(true);
+    try {
+      await updateProfile({
+        socialLinks: updatedLinks,
+        social_links: updatedLinks,
+      });
+      showToast('Links saved to profile ✓', 'success');
+    } catch (err) {
+      console.error('[ManageSocials] Failed to update social links', err);
+      showToast('Failed to save links to Firestore', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const addLink = () => {
-    if (!newPlatform || !newUrl) return;
-    const addedLinks = [...links, { platform: newPlatform, url: newUrl }];
+    if (!newPlatform.trim() || !newUrl.trim()) return;
+    let formattedUrl = newUrl.trim();
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+    const addedLinks = [...links, { platform: newPlatform.trim(), url: formattedUrl }];
     setLinks(addedLinks);
     setNewPlatform('');
     setNewUrl('');
@@ -38,72 +60,44 @@ export default function ManageSocials() {
     saveLinks(updatedLinks);
   };
 
-  const saveLinks = async (updatedLinks) => {
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
-      await fetch(`${API_BASE}/users/me/`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ social_links: updatedLinks }),
-      });
-    } catch (err) {
-      console.error('Failed to update social links', err);
-    }
-  };
-
   const handleInstagramSync = async (e) => {
     e.preventDefault();
     if (!igUsername.trim()) return;
 
     setSyncStatus('connecting');
-    setSyncMessage('Establishing secure handshake with Instagram Graph API...');
+    setSyncMessage('Connecting to Instagram profile...');
 
-    // Phase 1 Simulator Delay
-    await new Promise((resolve) => setTimeout(resolve, 1400));
+    await new Promise((resolve) => setTimeout(resolve, 800));
     setSyncStatus('syncing');
-    setSyncMessage('Importing media, verifying captions, and caching assets locally...');
+    setSyncMessage('Linking Instagram handle to profile...');
 
-    // Phase 2 Simulator Delay
-    await new Promise((resolve) => setTimeout(resolve, 1600));
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`${API_BASE}/posts/instagram-sync/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ instagram_username: igUsername.trim() }),
+      const cleanHandle = igUsername.trim().replace(/^@/, '');
+      const igUrl = `https://instagram.com/${cleanHandle}`;
+
+      const otherLinks = links.filter((l) => l.platform.toLowerCase() !== 'instagram');
+      const updatedLinks = [...otherLinks, { platform: 'Instagram', url: igUrl }];
+
+      await updateProfile({
+        instagramHandle: cleanHandle,
+        socialLinks: updatedLinks,
+        social_links: updatedLinks,
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to complete Instagram import.');
-      }
-
-      const data = await res.json();
+      setLinks(updatedLinks);
       setSyncStatus('success');
-      setSyncMessage(data.message || 'Import successful!');
+      setSyncMessage(`Linked @${cleanHandle} successfully!`);
+      showToast('Instagram connected! 📸', 'success');
 
-      // Save Instagram link to user social links
-      const alreadyLinked = links.some((l) => l.platform.toLowerCase() === 'instagram');
-      if (!alreadyLinked) {
-        const updatedLinks = [...links, { platform: 'Instagram', url: `https://instagram.com/${igUsername.trim()}` }];
-        setLinks(updatedLinks);
-        saveLinks(updatedLinks);
-      }
-
-      // Redirect after showing success
       setTimeout(() => {
         navigate('/profile/me');
-      }, 2000);
+      }, 1500);
     } catch (err) {
+      console.error('[ManageSocials] Instagram sync error:', err);
       setSyncStatus('error');
-      setSyncMessage('Instagram integration error. Please make sure the account is public.');
+      setSyncMessage('Could not save Instagram profile link.');
     }
   };
 
@@ -118,22 +112,31 @@ export default function ManageSocials() {
         {/* Left: General social links */}
         <section className="space-y-6">
           <div className="dk-panel p-5 rounded-3xl border border-white/[0.08] bg-[#09090B]/60 backdrop-blur-xl">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-4">Add Custom Link</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400">Add Custom Link</h3>
+              {isSaving && <span className="text-xs text-[#DFE104] font-bold animate-pulse">Saving…</span>}
+            </div>
+
             <div className="grid gap-3">
               <input
                 value={newPlatform}
                 onChange={(e) => setNewPlatform(e.target.value)}
                 className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 text-sm font-bold outline-none focus:border-[#DFE104] transition-colors"
-                placeholder="Platform (e.g. SoundCloud)"
+                placeholder="Platform (e.g. SoundCloud, Mixcloud, Spotify)"
               />
               <input
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
                 className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 text-sm font-bold outline-none focus:border-[#DFE104] transition-colors"
-                placeholder="URL (https://...)"
+                placeholder="URL (https://soundcloud.com/...)"
               />
-              <button onClick={addLink} className="dk-button bg-[#DFE104] text-black h-12 font-black uppercase tracking-wider" type="button">
-                Add Link
+              <button
+                onClick={addLink}
+                disabled={!newPlatform.trim() || !newUrl.trim() || isSaving}
+                className="dk-button bg-[#DFE104] text-black h-12 font-black uppercase tracking-wider disabled:opacity-40"
+                type="button"
+              >
+                {isSaving ? 'Saving…' : 'Add Link'}
               </button>
             </div>
 
@@ -152,7 +155,7 @@ export default function ManageSocials() {
                       </a>
                     </span>
                   </div>
-                  <button onClick={() => removeLink(link.url)} className="text-zinc-500 hover:text-white shrink-0" aria-label="Remove link">
+                  <button onClick={() => removeLink(link.url)} className="text-zinc-500 hover:text-white shrink-0 p-1" aria-label="Remove link">
                     <IconsaxAnimated name="close" size={18} />
                   </button>
                 </div>
@@ -171,12 +174,12 @@ export default function ManageSocials() {
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider">Instagram Sync</h3>
-                <p className="text-[10px] text-zinc-500">Auto-import posts and reels</p>
+                <p className="text-[10px] text-zinc-500">Connect your Instagram profile</p>
               </div>
             </div>
 
             <p className="text-xs text-zinc-400 leading-relaxed mb-4">
-              Link your Instagram profile to import all your media contents (posts, reels) onto Deckknob instantly.
+              Link your Instagram profile to showcase your handle and link directly on your public selector profile.
             </p>
 
             {syncStatus === 'idle' ? (
@@ -196,7 +199,7 @@ export default function ManageSocials() {
                   disabled={!igUsername.trim()}
                   className="dk-button w-full bg-[#DFE104] text-black h-12 font-black uppercase tracking-wider disabled:opacity-40"
                 >
-                  🔗 Link & Sync Feed
+                  🔗 Link Instagram
                 </button>
               </form>
             ) : (
@@ -217,7 +220,7 @@ export default function ManageSocials() {
                   <>
                     <div className="text-3xl">🎉</div>
                     <p className="text-xs text-emerald-400 font-bold">{syncMessage}</p>
-                    <p className="text-[10px] text-zinc-500">Updating your profile display...</p>
+                    <p className="text-[10px] text-zinc-500">Redirecting to profile...</p>
                   </>
                 )}
                 {syncStatus === 'error' && (
