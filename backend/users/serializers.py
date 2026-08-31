@@ -11,7 +11,11 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'bio', 'profile_pic', 'followers_count', 'following_count', 'is_followed')
+        fields = (
+            'id', 'username', 'email', 'bio', 'profile_pic', 'is_live',
+            'city', 'genre',
+            'followers_count', 'following_count', 'is_followed',
+        )
         read_only_fields = ('id', 'username')
 
     def get_followers_count(self, obj):
@@ -37,6 +41,12 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'password')
+
+    def validate_email(self, value):
+        """Enforce email uniqueness at registration time."""
+        if value and User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return value.lower() if value else value
 
     def create(self, validated_data):
         user = User.objects.create_user(

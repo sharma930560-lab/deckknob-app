@@ -1,0 +1,20 @@
+- [ ] Phase 1: Project Initialization
+    - [ ] Create `mobile/` project
+    - [ ] Install dependencies
+    - [ ] Configure Tailwind/NativeWind
+- [ ] Phase 2: Core Infrastructure
+    - [ ] Setup Firebase config
+    - [ ] Setup Persistence utility
+    - [ ] Migrate `authStore`
+    - [ ] Migrate basic services
+- [ ] Phase 3: Navigation
+    - [ ] Implement `RootNavigator`
+    - [ ] Implement `MainTabNavigator`
+- [ ] Phase 4: Screen Conversion
+    - [ ] Auth Module (Login/Register/Onboarding)
+    - [ ] Feed Module
+    - [ ] Explore Module
+    - [ ] Profile Module
+- [ ] Phase 5: Verification & Build
+    - [ ] Fix TS errors
+    - [ ] Build Android APK/Bundle

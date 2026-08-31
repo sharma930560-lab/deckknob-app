@@ -1,0 +1,55 @@
+# Virtual Environment
+venv/
+.venv/
+ENV/
+env/
+
+# Databases
+*.sqlite3
+*.db
+
+# Django Cache/Pycache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.hypothesis/
+backend/core/settings_local.py
+
+# Local Environment Variables
+.env
+.env.*
+!.env.example
+
+# Frontend build outputs and dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.stylelintcache
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.err
+.artifacts/
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+.gradle/
+build/
+*.apk
+*.aab
+
+# Media & test files
+backend/media/
+*.mp4
+*.m4v
+*.mov
+

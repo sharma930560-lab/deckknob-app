@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if the user is accessing their own document
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    match /usernames/{username} {
+      allow read: if true;
+      allow create, update, delete: if isOwner(request.resource.data.uid) || isOwner(resource.data.uid);
+    }
+
+    // Social Collections
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+    
+    match /stories/{storyId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+
+    match /reels/{reelId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+    
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid);
+    }
+  }
+}

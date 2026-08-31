@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dk-bg: #09090B;
+  --color-dk-surface: #18181B;
+  --color-dk-surface-light: rgba(255, 255, 255, 0.05);
+  
+  --color-dk-primary: #DFE104;
+  --color-dk-neon-blue: #00F0FF;
+  --color-dk-neon-purple: #8A2BE2;
+  --color-dk-neon-cyan: #00FFFF;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-dk-bg);
+    color: #FAFAFA;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .glass-panel {
+    background: rgba(24, 24, 27, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .text-shadow-neon {
+    text-shadow: 0 0 10px var(--color-dk-primary), 0 0 20px var(--color-dk-primary);
+  }
+}
+
+@layer components {
+  .dk-input {
+    @apply bg-white/5 border border-white/10 text-white placeholder-zinc-500 rounded-xl px-4 py-3 outline-none focus:ring-1 focus:ring-dk-primary/50 transition-all;
+  }
+  
+  .dk-button {
+    @apply flex items-center justify-center font-bold rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .dk-button-primary {
+    @apply bg-dk-primary text-black hover:brightness-110;
+  }
+  
+  .dk-button-glass {
+    @apply bg-white/5 text-white hover:bg-white/10 backdrop-blur-md;
+  }
+}

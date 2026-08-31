@@ -1,0 +1,35 @@
+/*
+ * NativeWind v5 global CSS — CSS-first configuration (no tailwind.config.js needed).
+ * Tailwind v4 CSS-first approach: theme tokens defined here with @theme blocks.
+ *
+ * DECKKNOB Brand System:
+ *   Primary: #DFE104 (neon yellow-green)
+ *   Background: #09090B (near-black)
+ *   Surface: #18181B (zinc-900)
+ *   Border: #27272A (zinc-800)
+ */
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+@import "nativewind/theme";
+
+@theme {
+  /* DECKKNOB brand tokens */
+  --color-brand: #DFE104;
+  --color-brand-dark: #b8bc03;
+  --color-bg: #09090B;
+  --color-surface: #18181B;
+  --color-surface-2: #27272A;
+  --color-border: #3F3F46;
+  --color-text: #FAFAFA;
+  --color-text-muted: #A1A1AA;
+  --color-text-subtle: #71717A;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* Border radius */
+  --radius-card: 16px;
+  --radius-pill: 9999px;
+}

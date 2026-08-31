@@ -1,0 +1,54 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+          && request.resource.size < 10 * 1024 * 1024; // 10 MB max
+    }
+
+    function isValidVideo() {
+      return request.resource.contentType.matches('video/.*')
+          && request.resource.size < 500 * 1024 * 1024; // 500 MB max
+    }
+
+    // ── User profile photos ───────────────────────────────
+    match /users/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+    }
+
+    // ── Post media (images/videos) ────────────────────────
+    match /posts/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+    }
+
+    // ── Reel videos ───────────────────────────────────────
+    match /reels/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(uid) && isValidVideo();
+    }
+
+    // ── Story media ───────────────────────────────────────
+    match /stories/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(uid) && (isValidImage() || isValidVideo());
+    }
+
+    // ── Event banners ─────────────────────────────────────
+    match /events/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isValidImage();
+    }
+  }
+}

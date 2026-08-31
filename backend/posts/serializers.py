@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Post, Like, Comment
+from .models import Post, Like, Comment, Reel, ReelComment
 
 class CommentSerializer(serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
@@ -22,10 +22,15 @@ class PostSerializer(serializers.ModelSerializer):
     likes_count = serializers.SerializerMethodField()
     comments_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    is_bookmarked = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
-        fields = ('id', 'user', 'username', 'profile_pic', 'media_url', 'media_type', 'caption', 'created_at', 'likes_count', 'comments_count', 'is_liked')
+        fields = (
+            'id', 'user', 'username', 'profile_pic',
+            'media_url', 'media_type', 'caption', 'created_at',
+            'likes_count', 'comments_count', 'is_liked', 'is_bookmarked',
+        )
         read_only_fields = ('user', 'created_at')
 
     def get_likes_count(self, obj):
@@ -40,6 +45,60 @@ class PostSerializer(serializers.ModelSerializer):
             return obj.likes.filter(user=request.user).exists()
         return False
 
+    def get_is_bookmarked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            from .models import Bookmark
+            return Bookmark.objects.filter(user=request.user, post=obj).exists()
+        return False
+
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class ReelSerializer(serializers.ModelSerializer):
+    username = serializers.ReadOnlyField(source='user.username')
+    profile_pic = serializers.ReadOnlyField(source='user.profile_pic')
+    likes_count = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+    is_bookmarked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Reel
+        fields = (
+            'id', 'user', 'username', 'profile_pic',
+            'media_url', 'caption', 'duration_seconds', 'created_at',
+            'likes_count', 'comments_count', 'is_liked', 'is_bookmarked',
+        )
+        read_only_fields = ('user', 'created_at')
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()
+
+    def get_comments_count(self, obj):
+        return obj.comments.count()
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
+
+    def get_is_bookmarked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            from .models import Bookmark
+            return Bookmark.objects.filter(user=request.user, reel=obj).exists()
+        return False
+
+
+class ReelCommentSerializer(serializers.ModelSerializer):
+    username = serializers.ReadOnlyField(source='user.username')
+    profile_pic = serializers.ReadOnlyField(source='user.profile_pic')
+
+    class Meta:
+        model = ReelComment
+        fields = ('id', 'user', 'username', 'profile_pic', 'reel', 'text', 'created_at')
+        read_only_fields = ('user', 'reel', 'created_at')

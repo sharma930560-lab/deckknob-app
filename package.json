@@ -1,0 +1,25 @@
+{
+  "name": "deckknob",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DECKKNOB — Unified monorepo: Web, Android, iOS, Backend, Shared",
+  "workspaces": [
+    "frontend",
+    "mobile",
+    "shared"
+  ],
+  "scripts": {
+    "web": "npm run dev --workspace=frontend",
+    "web:build": "npm run build --workspace=frontend",
+    "mobile:start": "npm run start --workspace=mobile",
+    "mobile:android": "npm run android --workspace=mobile",
+    "shared:typecheck": "npm run typecheck --workspace=shared"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "react-native": "^0.80.3"
+  }
+}
