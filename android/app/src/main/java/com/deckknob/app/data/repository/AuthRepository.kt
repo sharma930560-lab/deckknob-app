@@ -68,72 +68,75 @@ class AuthRepository @Inject constructor(
             val hasUid = !user.uid.isNullOrBlank()
             android.util.Log.d("DeckKnobAuthDiag", "Stage 5: Firebase authenticated user UID presence: hasUid=$hasUid")
 
-            // Resilient Firestore profile lookup and creation
-            var profile: UserDto
-            try {
-                android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup started")
-                val userDoc = firestore.collection("users").document(user.uid).get().await()
-                val profileExists = userDoc.exists()
-                android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup completed. Exists: $profileExists")
+            val profile = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                var prof: UserDto
+                try {
+                    android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup started")
+                    val userDoc = firestore.collection("users").document(user.uid).get().await()
+                    val profileExists = userDoc.exists()
+                    android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup completed. Exists: $profileExists")
 
-                if (!profileExists) {
-                    android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation started")
-                    var username = (user.email?.split("@")?.getOrNull(0) ?: "dj")
+                    if (!profileExists) {
+                        android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation started")
+                        var username = (user.email?.split("@")?.getOrNull(0) ?: "dj")
+                            .lowercase()
+                            .replace(Regex("[^a-z0-9_]"), "")
+                        if (username.length < 3) username = "user_${user.uid.take(5)}"
+
+                        var uniqueUsername = username
+                        var count = 1
+                        try {
+                            while (firestore.collection("usernames").document(uniqueUsername).get().await().exists() && count < 10) {
+                                uniqueUsername = "${username}_$count"
+                                count++
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("DeckKnobAuthDiag", "Username check non-fatal exception: ${e.message}")
+                        }
+
+                        prof = UserDto(
+                            uid = user.uid,
+                            username = uniqueUsername,
+                            email = user.email ?: "",
+                            profilePic = user.photoUrl?.toString() ?: "",
+                            role = "fan"
+                        )
+                        firestore.collection("users").document(user.uid).set(prof).await()
+                        try {
+                            firestore.collection("usernames").document(uniqueUsername).set(UsernameMapping(user.uid)).await()
+                        } catch (e: Exception) {
+                            android.util.Log.w("DeckKnobAuthDiag", "Username mapping write non-fatal exception: ${e.message}")
+                        }
+                        android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation completed")
+                    } else {
+                        prof = userDoc.toObject(UserDto::class.java) ?: UserDto(
+                            uid = user.uid,
+                            username = userDoc.getString("username") ?: "user",
+                            email = user.email ?: "",
+                            profilePic = userDoc.getString("profile_pic") ?: user.photoUrl?.toString() ?: ""
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("DeckKnobAuthDiag", "Stage 6/7: Firestore profile recovery fallback triggered: ${e.message}")
+                    val fallbackUsername = (user.email?.split("@")?.getOrNull(0) ?: "dj")
                         .lowercase()
                         .replace(Regex("[^a-z0-9_]"), "")
-                    if (username.length < 3) username = "user_${user.uid.take(5)}"
-
-                    var uniqueUsername = username
-                    var count = 1
-                    try {
-                        while (firestore.collection("usernames").document(uniqueUsername).get().await().exists() && count < 10) {
-                            uniqueUsername = "${username}_$count"
-                            count++
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.w("DeckKnobAuthDiag", "Username check non-fatal exception: ${e.message}")
-                    }
-
-                    profile = UserDto(
+                    prof = UserDto(
                         uid = user.uid,
-                        username = uniqueUsername,
+                        username = if (fallbackUsername.isNotBlank()) fallbackUsername else "user_${user.uid.take(5)}",
                         email = user.email ?: "",
                         profilePic = user.photoUrl?.toString() ?: "",
                         role = "fan"
                     )
-                    firestore.collection("users").document(user.uid).set(profile).await()
-                    try {
-                        firestore.collection("usernames").document(uniqueUsername).set(UsernameMapping(user.uid)).await()
-                    } catch (e: Exception) {
-                        android.util.Log.w("DeckKnobAuthDiag", "Username mapping write non-fatal exception: ${e.message}")
-                    }
-                    android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation completed")
-                } else {
-                    profile = userDoc.toObject(UserDto::class.java) ?: UserDto(
-                        uid = user.uid,
-                        username = userDoc.getString("username") ?: "user",
-                        email = user.email ?: "",
-                        profilePic = userDoc.getString("profile_pic") ?: user.photoUrl?.toString() ?: ""
-                    )
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("DeckKnobAuthDiag", "Stage 6/7: Firestore profile recovery fallback triggered: ${e.message}")
-                val fallbackUsername = (user.email?.split("@")?.getOrNull(0) ?: "dj")
-                    .lowercase()
-                    .replace(Regex("[^a-z0-9_]"), "")
-                profile = UserDto(
-                    uid = user.uid,
-                    username = if (fallbackUsername.isNotBlank()) fallbackUsername else "user_${user.uid.take(5)}",
-                    email = user.email ?: "",
-                    profilePic = user.photoUrl?.toString() ?: "",
-                    role = "fan"
-                )
-            }
 
-            sessionManager.saveSession(profile)
-            android.util.Log.d("DeckKnobAuthDiag", "Stage 8: Session persistence completed")
+                sessionManager.saveSession(prof)
+                android.util.Log.d("DeckKnobAuthDiag", "Stage 8: Session persistence completed")
+                prof
+            }
             Result.success(profile)
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             android.util.Log.e("DeckKnobAuthDiag", "Stage 11: AuthRepository caught exception in signInWithGoogle: ${e::class.java.simpleName}, message=${e.message}")
             Result.failure(mapFirebaseException(e))
         }

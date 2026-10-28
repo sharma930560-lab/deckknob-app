@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "408445559473-h5e18gvldonc03e62s4n7jqor4rtt8r3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.deckknob.app",
+            "certificate_hash": "1c1e5cc7998d1b55fc3932b1540d8330ebdfef1b"
+          }
+        },
+        {
           "client_id": "408445559473-tlmpp8gtldslsee3ntspvnt0kq4s0q6e.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
