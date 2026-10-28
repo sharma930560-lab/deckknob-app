@@ -22,6 +22,14 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
         fun createRoute(eventId: String) = if (eventId.isNotBlank()) "event_details/$eventId" else "events"
     }
 
+    /** Direct conversation with another user. Route = "chat/{targetUid}" */
+    object Chat : Screen("chat/{targetUid}", "Chat", Icons.Default.Email) {
+        fun createRoute(targetUid: String) = if (targetUid.isNotBlank()) "chat/$targetUid" else "messages"
+    }
+
+    /** Messages inbox list. Route = "messages" */
+    object Messages : Screen("messages", "Messages", Icons.Default.Email)
+
     companion object {
         val Klyps: Screen get() = Reels
     }

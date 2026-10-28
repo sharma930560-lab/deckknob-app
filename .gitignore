@@ -60,4 +60,10 @@ backend/media/
 android/local.properties
 local.properties
 
+# Android keystores and signing credentials
+*.jks
+*.keystore
+signing.properties
+
+
 

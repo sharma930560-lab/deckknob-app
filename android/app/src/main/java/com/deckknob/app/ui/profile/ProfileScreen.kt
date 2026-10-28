@@ -49,6 +49,7 @@ fun ProfileScreen(
     targetUid: String? = null,
     onBack: (() -> Unit)? = null,
     onSettingsClick: () -> Unit = {},
+    onOpenChat: ((String) -> Unit)? = null,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     LaunchedEffect(targetUid) {
@@ -321,16 +322,16 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Action Buttons: Edit Profile & Share Profile
+                    // Action Buttons: Follow/Following, Message, Share
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (viewModel.isOtherUser) {
                             Button(
                                 onClick = { viewModel.toggleFollow() },
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .weight(1.1f)
                                     .height(46.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (viewModel.isFollowingUser) Color(0xFF27272A) else Color(0xFFDFE104),
@@ -349,7 +350,61 @@ fun ProfileScreen(
                                     if (viewModel.isFollowingUser) "FOLLOWING" else "FOLLOW",
                                     color = if (viewModel.isFollowingUser) Color.White else Color.Black,
                                     fontWeight = FontWeight.Black,
-                                    fontSize = 13.sp
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    val destinationUid = targetUid ?: user?.uid.orEmpty()
+                                    if (destinationUid.isNotBlank()) {
+                                        onOpenChat?.invoke(destinationUid)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(46.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF27272A),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Email,
+                                    contentDescription = "Message",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "MESSAGE",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "Check out @${user?.username ?: "artist"} on DECKKNOB! https://deckknob.com/@${user?.username}"
+                                        )
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
+                                },
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color(0xFF27272A), RoundedCornerShape(12.dp))
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = "Share Profile",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         } else {
@@ -378,41 +433,41 @@ fun ProfileScreen(
                                     fontSize = 13.sp
                                 )
                             }
-                        }
 
-                        Button(
-                            onClick = {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(
-                                        Intent.EXTRA_TEXT,
-                                        "Check out @${user?.username ?: "artist"} on DECKKNOB! https://deckknob.com/@${user?.username}"
-                                    )
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF27272A),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Share,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "SHARE PROFILE",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            Button(
+                                onClick = {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "Check out @${user?.username ?: "artist"} on DECKKNOB! https://deckknob.com/@${user?.username}"
+                                        )
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF27272A),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "SHARE PROFILE",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
                     }
 
