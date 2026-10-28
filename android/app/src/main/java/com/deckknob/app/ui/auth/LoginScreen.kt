@@ -73,7 +73,8 @@ fun LoginScreen(
                     viewModel.onGoogleSignInError("Network error connecting to Google. Please check your internet connection.")
                 }
                 10, 12500 -> {
-                    viewModel.onGoogleSignInError("Google Sign-In configuration required: Add debug SHA-1 to Firebase Console (Code ${e.statusCode})")
+                    val certType = if (com.deckknob.app.BuildConfig.DEBUG) "debug" else "production release"
+                    viewModel.onGoogleSignInError("Google Sign-In configuration required: Add $certType SHA-1 to Firebase Console (Code ${e.statusCode})")
                 }
                 else -> {
                     viewModel.onGoogleSignInError("Google Sign-In failed (Code ${e.statusCode}): ${e.localizedMessage ?: "Authentication error"}")
@@ -221,7 +222,8 @@ fun LoginScreen(
                     Log.d("DeckKnobAuthDiag", "Stage 1: Google sign-in button tapped. WebClientId present: ${!webClientId.isNullOrBlank()}, isPlaceholder: $isPlaceholder")
 
                     if (webClientId.isNullOrBlank() || isPlaceholder) {
-                        viewModel.onGoogleSignInError("Google Sign-In configuration required: Register com.deckknob.app with debug SHA-1 in Firebase Console and download updated google-services.json (Code 10)")
+                        val certType = if (com.deckknob.app.BuildConfig.DEBUG) "debug" else "production release"
+                        viewModel.onGoogleSignInError("Google Sign-In configuration required: Register com.deckknob.app with $certType SHA-1 in Firebase Console and download updated google-services.json (Code 10)")
                         return@OutlinedButton
                     }
 
@@ -231,7 +233,9 @@ fun LoginScreen(
                             .requestEmail()
                             .build()
                         val client = GoogleSignIn.getClient(context, gso)
-                        googleSignInLauncher.launch(client.signInIntent)
+                        client.signOut().addOnCompleteListener {
+                            googleSignInLauncher.launch(client.signInIntent)
+                        }
                     } catch (e: Exception) {
                         Log.e("DeckKnobAuthDiag", "Stage 11: Error building GoogleSignInOptions: ${e.message}")
                         viewModel.onGoogleSignInError("Failed to initialize Google Sign-In: ${e.localizedMessage}")
