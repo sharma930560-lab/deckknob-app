@@ -326,23 +326,85 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    suspend fun sendPasswordResetEmail(emailOrUsername: String): Result<Unit> {
+        return try {
+            var email = emailOrUsername.trim()
+            if (email.isBlank()) {
+                return Result.failure(Exception("Please enter your email address."))
+            }
+
+            // Resolve email if username was provided
+            if (!email.contains("@")) {
+                val usernameDoc = firestore.collection("usernames").document(email.lowercase()).get().await()
+                if (usernameDoc.exists()) {
+                    val uid = usernameDoc.toObject(UsernameMapping::class.java)?.uid
+                        ?: throw Exception("Username lookup failed")
+                    val userDoc = firestore.collection("users").document(uid).get().await()
+                    email = userDoc.getString("email") ?: throw Exception("Email not found for user")
+                } else {
+                    throw Exception("No account found with this username.")
+                }
+            }
+
+            val emailRegex = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+            if (!emailRegex.matches(email)) {
+                return Result.failure(Exception("Enter a valid email address."))
+            }
+
+            auth.sendPasswordResetEmail(email).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(mapFirebaseException(e))
+        }
+    }
+
     private fun mapFirebaseException(e: Throwable): Exception {
         val message = e.message ?: ""
         return when {
-            e is com.google.firebase.auth.FirebaseAuthUserCollisionException ->
-                Exception("An account with this email already exists.")
-            e is com.google.firebase.auth.FirebaseAuthWeakPasswordException ->
-                Exception("Password is too weak. Please use at least 6 characters.")
-            e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
-                Exception("Invalid email format or password.")
+            e is com.google.firebase.FirebaseNetworkException ||
             message.contains("client is offline", ignoreCase = true) ||
             message.contains("UNAVAILABLE", ignoreCase = true) ||
-            message.contains("Unable to resolve host", ignoreCase = true) ->
-                Exception("Connection problem. Please check your internet connection and try again.")
+            message.contains("Unable to resolve host", ignoreCase = true) ||
+            message.contains("network_error", ignoreCase = true) ->
+                Exception("Unable to connect. Check your internet and try again.")
+
+            e is com.google.firebase.FirebaseTooManyRequestsException ||
+            message.contains("TOO_MANY_ATTEMPTS", ignoreCase = true) ->
+                Exception("Too many attempts. Please try again later.")
+
+            e is com.google.firebase.auth.FirebaseAuthInvalidUserException -> {
+                if (message.contains("USER_DISABLED", ignoreCase = true)) {
+                    Exception("This account has been disabled. Please contact support.")
+                } else {
+                    Exception("Email or password is incorrect.")
+                }
+            }
+
+            e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> {
+                val errorCode = (e as? com.google.firebase.auth.FirebaseAuthException)?.errorCode ?: ""
+                if (errorCode == "ERROR_INVALID_EMAIL" || message.contains("badly formatted", ignoreCase = true)) {
+                    Exception("Enter a valid email address.")
+                } else {
+                    Exception("Email or password is incorrect.")
+                }
+            }
+
+            e is com.google.firebase.auth.FirebaseAuthUserCollisionException ->
+                Exception("An account with this email already exists.")
+
+            e is com.google.firebase.auth.FirebaseAuthWeakPasswordException ->
+                Exception("Password is too weak. Please use at least 6 characters.")
+
+            message.contains("Username not found", ignoreCase = true) ||
+            message.contains("No account found with this username", ignoreCase = true) ->
+                Exception("Username not found. Please check your spelling or use your email.")
+
             message.contains("PERMISSION_DENIED", ignoreCase = true) ->
                 Exception("Access denied. Please check your account permissions.")
+
             message.contains("Object does not exist", ignoreCase = true) || message.contains("-13010", ignoreCase = true) ->
                 Exception("Selected media file could not be uploaded. Please try picking a different photo.")
+
             else -> Exception(e.localizedMessage ?: "An unexpected error occurred. Please try again.")
         }
     }

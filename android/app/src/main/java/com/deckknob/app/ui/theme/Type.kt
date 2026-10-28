@@ -69,15 +69,13 @@ val DeckKnobTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 14.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.5.sp,
-        color = DeckKnobYellow
+        letterSpacing = 0.5.sp
     ),
     labelSmall = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
         fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 1.25.sp,
-        color = DeckKnobYellow
+        letterSpacing = 1.25.sp
     )
 )

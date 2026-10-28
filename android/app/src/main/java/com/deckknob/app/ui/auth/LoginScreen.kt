@@ -6,13 +6,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +32,9 @@ import com.deckknob.app.ui.components.LogoVariant
 import com.deckknob.app.ui.theme.DeckKnobBlack
 import com.deckknob.app.ui.theme.DeckKnobDarkCard
 import com.deckknob.app.ui.theme.DeckKnobDarkCardBorder
+import com.deckknob.app.ui.theme.DeckKnobError
+import com.deckknob.app.ui.theme.DeckKnobSuccess
+import com.deckknob.app.ui.theme.DeckKnobTextSecondary
 import com.deckknob.app.ui.theme.DeckKnobYellow
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -70,7 +76,7 @@ fun LoginScreen(
                     Log.d("DeckKnobAuthDiag", "Google Sign-In cancelled by user")
                 }
                 GoogleSignInStatusCodes.NETWORK_ERROR -> {
-                    viewModel.onGoogleSignInError("Network error connecting to Google. Please check your internet connection.")
+                    viewModel.onGoogleSignInError("Unable to connect. Check your internet and try again.")
                 }
                 10, 12500 -> {
                     val certType = if (com.deckknob.app.BuildConfig.DEBUG) "debug" else "production release"
@@ -90,6 +96,16 @@ fun LoginScreen(
         if (viewModel.loginSuccess) {
             onLoginSuccess()
         }
+    }
+
+    if (viewModel.isForgotPasswordDialogOpen) {
+        ForgotPasswordDialog(
+            initialEmail = viewModel.forgotPasswordEmail,
+            isLoading = viewModel.isResetPasswordLoading,
+            errorMessage = viewModel.resetPasswordError,
+            onDismiss = { viewModel.dismissForgotPasswordDialog() },
+            onSubmit = { email -> viewModel.sendPasswordReset(email) }
+        )
     }
 
     Box(
@@ -120,9 +136,14 @@ fun LoginScreen(
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = DeckKnobYellow,
-                    unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f)
+                    unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f),
+                    focusedLabelColor = DeckKnobYellow,
+                    unfocusedLabelColor = DeckKnobTextSecondary,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
-                singleLine = true
+                singleLine = true,
+                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -136,23 +157,98 @@ fun LoginScreen(
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = DeckKnobYellow,
-                    unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f)
+                    unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f),
+                    focusedLabelColor = DeckKnobYellow,
+                    unfocusedLabelColor = DeckKnobTextSecondary,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
-                singleLine = true
+                singleLine = true,
+                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading
             )
             
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            if (viewModel.error != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Right-aligned "Forgot password?" text action
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
                 Text(
-                    text = viewModel.error!!,
-                    color = MaterialTheme.colorScheme.error,
+                    text = "Forgot password?",
+                    color = DeckKnobYellow,
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 4.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable(
+                            enabled = !viewModel.isLoading && !viewModel.isGoogleLoading && !viewModel.isResetPasswordLoading,
+                            onClick = { viewModel.onForgotPasswordClick() }
+                        )
+                        .padding(vertical = 4.dp, horizontal = 2.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            if (viewModel.resetPasswordSuccessMessage != null) {
+                Surface(
+                    color = DeckKnobSuccess.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, DeckKnobSuccess.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = DeckKnobSuccess,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = viewModel.resetPasswordSuccessMessage!!,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            if (viewModel.error != null) {
+                Surface(
+                    color = DeckKnobError.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, DeckKnobError.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = DeckKnobError,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = viewModel.error!!,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
             }
             
+            // Primary High-Contrast Login Button
             Button(
                 onClick = { viewModel.onLoginClick() },
                 modifier = Modifier
@@ -160,15 +256,27 @@ fun LoginScreen(
                     .height(52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = DeckKnobYellow,
-                    contentColor = DeckKnobBlack
+                    contentColor = DeckKnobBlack,
+                    disabledContainerColor = DeckKnobYellow.copy(alpha = 0.45f),
+                    disabledContentColor = DeckKnobBlack.copy(alpha = 0.6f)
                 ),
                 shape = RoundedCornerShape(16.dp),
-                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading
+                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading && !viewModel.isResetPasswordLoading
             ) {
                 if (viewModel.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DeckKnobBlack)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = DeckKnobBlack,
+                        strokeWidth = 2.5.dp
+                    )
                 } else {
-                    Text("LOG IN", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(
+                        text = "LOG IN",
+                        color = DeckKnobBlack,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
 
@@ -250,7 +358,7 @@ fun LoginScreen(
                     contentColor = Color.White
                 ),
                 border = BorderStroke(1.dp, DeckKnobDarkCardBorder),
-                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading
+                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading && !viewModel.isResetPasswordLoading
             ) {
                 if (viewModel.isGoogleLoading) {
                     CircularProgressIndicator(
@@ -284,7 +392,7 @@ fun LoginScreen(
 
             TextButton(
                 onClick = onRegisterClick,
-                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading
+                enabled = !viewModel.isLoading && !viewModel.isGoogleLoading && !viewModel.isResetPasswordLoading
             ) {
                 Text(
                     text = "Don't have an account? Join us",
@@ -294,4 +402,111 @@ fun LoginScreen(
             }
         }
     }
+}
+
+@Composable
+fun ForgotPasswordDialog(
+    initialEmail: String,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit
+) {
+    var emailInput by remember(initialEmail) { mutableStateOf(initialEmail) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        containerColor = DeckKnobDarkCard,
+        title = {
+            Text(
+                text = "RESET PASSWORD",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                letterSpacing = 0.5.sp
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Enter your registered email address and we will send you a link to reset your password.",
+                    color = DeckKnobTextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = { emailInput = it },
+                    label = { Text("Email Address") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DeckKnobYellow,
+                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f),
+                        focusedLabelColor = DeckKnobYellow,
+                        unfocusedLabelColor = DeckKnobTextSecondary,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    singleLine = true,
+                    enabled = !isLoading
+                )
+
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(emailInput) },
+                enabled = !isLoading && emailInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = DeckKnobYellow,
+                    contentColor = DeckKnobBlack,
+                    disabledContainerColor = DeckKnobYellow.copy(alpha = 0.4f),
+                    disabledContentColor = DeckKnobBlack.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = DeckKnobBlack,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "SEND RESET LINK",
+                        color = DeckKnobBlack,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text(
+                    text = "CANCEL",
+                    color = DeckKnobTextSecondary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
