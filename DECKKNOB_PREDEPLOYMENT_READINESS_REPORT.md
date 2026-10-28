@@ -352,3 +352,10 @@ Executed on live Android 16 emulator (`emulator-5554`):
 - **Artifact Size:** 33,120,952 bytes (31.6 MB)
 - **Signing Status:** Built with Android debug certificate (`Android Debug, O=Android, C=US`).
 - **Classification:** **Temporary Debug Build** (production signing keystore not configured; safe state maintained).
+
+### 9.4 Git Release Commit & Remote Push
+- **Target Branch:** `main`
+- **Remote:** `origin` (`https://github.com/sharma930560-lab/deckknob-app.git`)
+- **Release Commit SHA:** `06eab5c`
+- **Commit Message:** `Release DECKKNOB website and Android app`
+- **Push Status:** Successfully pushed to `origin/main` (`6832aa5..06eab5c`).
