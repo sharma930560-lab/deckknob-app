@@ -1,33 +1,49 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
+import AnimatedFireButton from '../common/AnimatedFireButton';
 import MentionInput from '../ui/MentionInput';
 import EmojiPicker from '../ui/EmojiPicker';
 import { auth } from '../../config/firebase';
+import authStore from '../../stores/authStore';
 import { postService } from '../../services/postService';
+import { audioCoordinator } from '../../services/musicService';
 import { useToast } from '../ui/Toast';
 
-// Parse caption - turn @username into clickable links
-function ParsedCaption({ text }) {
+// Parse caption - turn @username and #hashtags into clickable links
+export function ParsedCaption({ text }) {
   if (!text) return null;
-  const parts = text.split(/(@\w+)/g);
+  const parts = text.split(/(@\w+|#\w+)/g);
   return (
     <span>
-      {parts.map((part, i) =>
-        part.startsWith('@') ? (
-          <Link
-            key={i}
-            to={`/profile/${part.slice(1)}`}
-            className="text-[#DFE104] font-bold hover:underline"
-            onClick={e => e.stopPropagation()}
-          >
-            {part}
-          </Link>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (part.startsWith('@')) {
+          return (
+            <Link
+              key={i}
+              to={`/profile/${part.slice(1)}`}
+              className="text-[#DFE104] font-bold hover:underline"
+              onClick={e => e.stopPropagation()}
+            >
+              {part}
+            </Link>
+          );
+        } else if (part.startsWith('#')) {
+          const tag = part.slice(1);
+          return (
+            <Link
+              key={i}
+              to={`/explore?tag=${encodeURIComponent(tag)}`}
+              className="text-[#DFE104] font-bold hover:underline"
+              onClick={e => e.stopPropagation()}
+            >
+              {part}
+            </Link>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
     </span>
   );
 }
@@ -49,6 +65,7 @@ export default function PostCard({ post }) {
   const [liked, setLiked] = useState(post.is_liked ?? false);
   const [saved, setSaved] = useState(post.is_bookmarked ?? false);
   const [burst, setBurst] = useState(false);
+  const [burstPos, setBurstPos] = useState({ x: "50%", y: "50%" });
   const [localLikes, setLocalLikes] = useState(post.likes_count ?? 0);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -56,6 +73,113 @@ export default function PostCard({ post }) {
   const [loadingComments, setLoadingComments] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showCommentEmoji, setShowCommentEmoji] = useState(false);
+
+  // Music Soundtrack state & audio coordinator
+  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [musicError, setMusicError] = useState(false);
+  const audioRef = useRef(null);
+  const cardRef = useRef(null);
+
+  const stopPostAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlayingMusic(false);
+    audioCoordinator.stopSession(`post_${post.id}`);
+  }, [post.id]);
+
+  const handleToggleMusic = () => {
+    const audio = audioRef.current;
+    if (!audio || !post.music) return;
+
+    if (isPlayingMusic) {
+      audio.pause();
+      setIsPlayingMusic(false);
+      audioCoordinator.stopSession(`post_${post.id}`);
+      return;
+    }
+
+    const startPos = Number(post.music.startTime) || 0;
+    audio.currentTime = startPos;
+    audio.volume = 0.85;
+
+    // Coordinate with singleton audio coordinator
+    audioCoordinator.startSession(`post_${post.id}`, 'post', () => {
+      if (audioRef.current) audioRef.current.pause();
+      setIsPlayingMusic(false);
+    });
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlayingMusic(true);
+          setMusicError(false);
+        })
+        .catch((err) => {
+          console.warn('[PostCard] Music playback error:', err);
+          setMusicError(true);
+          setIsPlayingMusic(false);
+          audioCoordinator.stopSession(`post_${post.id}`);
+        });
+    }
+  };
+
+  // Loop clip & cleanup
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !post.music) return;
+
+    const startPos = Number(post.music.startTime) || 0;
+    const clipDur = Number(post.music.duration) || 15;
+    const loopEnd = startPos + clipDur;
+
+    const onTimeUpdate = () => {
+      if (audio.currentTime >= loopEnd) {
+        audio.currentTime = startPos;
+      }
+    };
+    const onEnded = () => {
+      audio.currentTime = startPos;
+      audio.play().catch(() => setIsPlayingMusic(false));
+    };
+    const onError = () => {
+      setMusicError(true);
+      setIsPlayingMusic(false);
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      audio.pause();
+    };
+  }, [post.music]);
+
+  // Pause music when post scrolls away from viewport
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || !post.music) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting && isPlayingMusic) {
+          stopPostAudio();
+        }
+      },
+      { threshold: 0.2 }
+    );
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      stopPostAudio();
+    };
+  }, [isPlayingMusic, post.music, stopPostAudio]);
 
   const currentUid = auth.currentUser?.uid;
 
@@ -65,10 +189,10 @@ export default function PostCard({ post }) {
     `https://ui-avatars.com/api/?name=${post.user?.username || post.username || 'U'}&background=DFE104&color=000&bold=true`;
   const username = post.user?.username || post.username || 'unknown';
 
-  /* ── Like ── */
+  /* ── Like / Fire ── */
   const handleLike = async () => {
     if (!currentUid) {
-      showToast('Log in to like posts.', 'error');
+      showToast('Log in to drop fires.', 'error');
       return;
     }
     const nowLiked = !liked;
@@ -127,12 +251,15 @@ export default function PostCard({ post }) {
     if (!commentText.trim()) return;
     setSubmittingComment(true);
     try {
+      const currentUserProfile = authStore.getState().user;
       const me = auth.currentUser;
+      const commenterUsername = currentUserProfile?.username || me?.displayName || 'selector';
+      const commenterAvatar = currentUserProfile?.profilePic || currentUserProfile?.profile_pic || me?.photoURL || '';
       const newComment = await postService.addComment(
         post.id,
         currentUid,
-        me.displayName || username,
-        me.photoURL || avatar,
+        commenterUsername,
+        commenterAvatar,
         commentText.trim()
       );
       setComments((prev) => [...prev, newComment]);
@@ -162,6 +289,7 @@ export default function PostCard({ post }) {
   return (
     <>
       <motion.article
+        ref={cardRef}
         layout
         initial={{ opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -212,33 +340,88 @@ export default function PostCard({ post }) {
           )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
 
-          {/* Like burst animation */}
+          {/* Tap-position-aware Fire burst animation */}
           <AnimatePresence>
             {burst && (
               <motion.div
                 initial={{ scale: 0, opacity: 0, rotate: -12 }}
-                animate={{ scale: 1.2, opacity: 1, rotate: 8 }}
-                exit={{ scale: 1.65, opacity: 0 }}
+                animate={{ scale: 1.25, opacity: 1, rotate: 6 }}
+                exit={{ scale: 1.6, opacity: 0 }}
                 transition={{ duration: 0.55, ease: [0.175, 0.885, 0.32, 1.275] }}
-                className="absolute inset-0 grid place-items-center text-white drop-shadow-2xl pointer-events-none"
+                style={{ left: burstPos.x, top: burstPos.y }}
+                className="absolute -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none drop-shadow-[0_0_40px_rgba(255,120,0,0.9)] z-30"
               >
-                <IconsaxAnimated name="heart" size={96} filled />
+                <span className="text-8xl">🔥</span>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Music Soundtrack Player & Pill */}
+          {post.music && (
+            <>
+              <audio
+                ref={audioRef}
+                playsInline
+                preload="none"
+                src={post.music.audioUrl || post.music.previewUrl}
+              />
+              <div className="absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleMusic();
+                  }}
+                  className={`flex items-center gap-2 rounded-full px-3 py-1.5 backdrop-blur-md transition-all shadow-lg text-xs font-bold ${
+                    isPlayingMusic
+                      ? 'bg-[#DFE104] text-black shadow-[0_0_15px_rgba(223,225,4,0.4)]'
+                      : 'bg-black/75 text-white hover:bg-black/90 border border-white/10'
+                  }`}
+                  aria-label={isPlayingMusic ? `Pause soundtrack: ${post.music.title}` : `Play soundtrack: ${post.music.title}`}
+                >
+                  <div className="flex items-end gap-0.5 h-3">
+                    {isPlayingMusic ? (
+                      <>
+                        <span className="w-0.5 h-3 bg-current rounded animate-[bounce_0.6s_infinite]" />
+                        <span className="w-0.5 h-2 bg-current rounded animate-[bounce_0.6s_infinite_0.2s]" />
+                        <span className="w-0.5 h-3 bg-current rounded animate-[bounce_0.6s_infinite_0.4s]" />
+                      </>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="truncate max-w-[130px]">{post.music.title}</span>
+                  <span className="text-[10px] opacity-75 truncate max-w-[100px] hidden sm:inline">• {post.music.artist}</span>
+                  {post.music.duration && <span className="text-[10px] opacity-60">({post.music.duration}s)</span>}
+                </button>
+                {musicError ? (
+                  <span className="rounded-full bg-red-900/80 backdrop-blur px-2 py-1 text-[10px] text-red-200 border border-red-500/20">
+                    Audio unavailable
+                  </span>
+                ) : post.music.attribution ? (
+                  <span className="hidden md:inline-block rounded-full bg-black/60 backdrop-blur px-2 py-1 text-[9px] text-zinc-400 border border-white/5 truncate max-w-[160px]" title={post.music.attribution}>
+                    {post.music.attribution}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Actions */}
         <div className="px-4 py-4 sm:px-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-5">
-              <button
-                onClick={handleLike}
-                className={`dk-button transition-all active:scale-90 ${liked ? 'text-[#DFE104]' : 'text-white'}`}
-                aria-label="Like"
-              >
-                <IconsaxAnimated name="heart" size={27} filled={liked} />
-              </button>
+              <AnimatedFireButton
+                isLiked={liked}
+                count={localLikes}
+                showCount={false}
+                size="md"
+                onToggle={handleLike}
+                ariaLabel={liked ? 'Remove Fire' : 'Add Fire'}
+              />
               <button
                 onClick={openComments}
                 className="dk-button text-white transition-all active:scale-90"
@@ -263,7 +446,10 @@ export default function PostCard({ post }) {
             </button>
           </div>
 
-          <p className="mt-2 text-sm font-bold">{localLikes.toLocaleString()} likes</p>
+          <p className="mt-2 text-sm font-bold flex items-center gap-1.5 select-none text-white">
+            <span>🔥</span>
+            <span>{localLikes.toLocaleString()} {localLikes === 1 ? 'Fire' : 'Fires'}</span>
+          </p>
           <p className="mt-1 text-sm leading-relaxed text-zinc-300">
             <Link to={`/profile/${username}`} className="mr-2 font-bold text-white hover:underline">@{username}</Link>
             <ParsedCaption text={post.caption} />

@@ -1,9 +1,15 @@
-import { storage } from '../config/firebase';
+import axios from 'axios';
+import { storage, auth } from '../config/firebase';
 import {
   ref,
   uploadBytesResumable,
   getDownloadURL,
 } from 'firebase/storage';
+
+// ── Environment Configuration ───────────────────────────────────────────────
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+const IS_CLOUDINARY_CONFIGURED = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
 
 /**
  * Convert a base64 data URL to a Blob.
@@ -20,55 +26,25 @@ function dataURLtoBlob(dataurl) {
   return new Blob([u8arr], { type: mime });
 }
 
-/**
- * Upload a File, Blob, or DataURL to Firebase Storage and return the download URL.
- * @param {File|Blob|string} fileOrBlobOrDataUrl - The file or base64 string to upload.
- * @param {string} path - Full storage path, e.g. "users/uid123/profile_1234.jpg"
- * @param {function} [onProgress] - Optional callback(percent: number)
- * @returns {Promise<string>} The download URL.
- */
-async function uploadToStorage(fileOrBlobOrDataUrl, path, onProgress) {
-  let uploadableBlob = fileOrBlobOrDataUrl;
-  let contentType = 'application/octet-stream';
-
-  if (typeof fileOrBlobOrDataUrl === 'string' && fileOrBlobOrDataUrl.startsWith('data:')) {
-    uploadableBlob = dataURLtoBlob(fileOrBlobOrDataUrl);
-    contentType = uploadableBlob.type;
-  } else if (fileOrBlobOrDataUrl instanceof Blob || fileOrBlobOrDataUrl instanceof File) {
-    uploadableBlob = fileOrBlobOrDataUrl;
-    contentType = fileOrBlobOrDataUrl.type || (path.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+function getMimeTypeFromExtension(path, fallback = 'image/jpeg') {
+  const ext = (path || '').split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'mp4': return 'video/mp4';
+    case 'mov': return 'video/quicktime';
+    case 'webm': return 'video/webm';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    case 'mp3': return 'audio/mpeg';
+    case 'wav': return 'audio/wav';
+    case 'm4a': return 'audio/mp4';
+    case 'aac': return 'audio/aac';
+    case 'ogg': return 'audio/ogg';
+    case 'flac': return 'audio/flac';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    default: return fallback;
   }
-
-  const storageRef = ref(storage, path);
-  const uploadTask = uploadBytesResumable(storageRef, uploadableBlob, {
-    contentType,
-  });
-
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        if (onProgress && snapshot.totalBytes > 0) {
-          const percent = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-          );
-          onProgress(percent);
-        }
-      },
-      (error) => {
-        console.error('[storageService] Upload error:', error);
-        reject(new Error(`Storage upload failed: ${error.message}`));
-      },
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(url);
-        } catch (err) {
-          reject(err);
-        }
-      }
-    );
-  });
 }
 
 function getFileExtension(fileOrBlob, defaultExt = 'jpg') {
@@ -84,7 +60,143 @@ function getFileExtension(fileOrBlob, defaultExt = 'jpg') {
   return defaultExt;
 }
 
+function resolveActiveUid(uid) {
+  const activeUid = auth.currentUser?.uid || uid;
+  if (!activeUid) {
+    throw new Error('Authentication required: user must be logged in to upload media.');
+  }
+  return activeUid;
+}
+
+/**
+ * Upload to Cloudinary using an Unsigned Upload Preset.
+ * Completely free tier, no credit card, no Firebase billing.
+ */
+async function uploadToCloudinary(fileOrBlobOrDataUrl, folder, resourceType = 'auto', onProgress) {
+  if (!IS_CLOUDINARY_CONFIGURED) {
+    throw new Error('Cloudinary is not configured. Missing VITE_CLOUDINARY_CLOUD_NAME or VITE_CLOUDINARY_UPLOAD_PRESET.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileOrBlobOrDataUrl);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  if (folder) {
+    formData.append('folder', folder);
+  }
+
+  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
+
+  try {
+    const response = await axios.post(endpoint, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
+    });
+
+    if (response.data && response.data.secure_url) {
+      return response.data.secure_url;
+    }
+    throw new Error('Cloudinary response did not contain a secure_url.');
+  } catch (error) {
+    const msg = error.response?.data?.error?.message || error.message;
+    console.error('[storageService] Cloudinary upload error:', msg);
+    throw new Error(`Media upload failed: ${msg}`, { cause: error });
+  }
+}
+
+/**
+ * Upload to Firebase Storage (Fallback when Cloudinary is not active).
+ */
+async function uploadToFirebaseStorage(fileOrBlobOrDataUrl, path, onProgress) {
+  if (!fileOrBlobOrDataUrl) {
+    throw new Error('No media file provided for upload.');
+  }
+
+  let uploadableBlob = fileOrBlobOrDataUrl;
+  let contentType = 'image/jpeg';
+
+  if (typeof fileOrBlobOrDataUrl === 'string' && fileOrBlobOrDataUrl.startsWith('data:')) {
+    uploadableBlob = dataURLtoBlob(fileOrBlobOrDataUrl);
+    contentType = uploadableBlob.type || getMimeTypeFromExtension(path, 'image/jpeg');
+  } else if (fileOrBlobOrDataUrl instanceof Blob || fileOrBlobOrDataUrl instanceof File) {
+    uploadableBlob = fileOrBlobOrDataUrl;
+    contentType = fileOrBlobOrDataUrl.type || getMimeTypeFromExtension(path, 'image/jpeg');
+  }
+
+  if (!contentType || contentType === 'application/octet-stream') {
+    contentType = getMimeTypeFromExtension(path, 'image/jpeg');
+  }
+
+  const storageRef = ref(storage, path);
+  const metadata = {
+    contentType,
+    customMetadata: {
+      uploadedAt: new Date().toISOString()
+    }
+  };
+
+  const uploadTask = uploadBytesResumable(storageRef, uploadableBlob, metadata);
+
+  return new Promise((resolve, reject) => {
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        if (onProgress && snapshot.totalBytes > 0) {
+          const percent = Math.round(
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          );
+          onProgress(percent);
+        }
+      },
+      (error) => {
+        console.error('[storageService] Firebase Storage error:', error);
+        if (error.code === 'storage/unknown' || error.status_ === 404) {
+          reject(new Error(
+            'Media storage is unprovisioned. To enable free media persistence without Firebase billing, configure Cloudinary (VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET) in your .env file, or activate Cloud Storage in the Firebase Console.'
+          ));
+        } else {
+          reject(new Error(`Storage upload failed: ${error.message}`));
+        }
+      },
+      async () => {
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(url);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    );
+  });
+}
+
+/**
+ * Primary Media Dispatcher.
+ * Routes to Cloudinary if configured; otherwise routes to Firebase Storage.
+ */
+async function uploadMedia({ file, path, folder, resourceType = 'auto', onProgress }) {
+  if (IS_CLOUDINARY_CONFIGURED) {
+    return uploadToCloudinary(file, folder, resourceType, onProgress);
+  }
+  return uploadToFirebaseStorage(file, path, onProgress);
+}
+
 export const storageService = {
+  /**
+   * Status of configured storage providers.
+   */
+  getProviderStatus: () => ({
+    provider: IS_CLOUDINARY_CONFIGURED ? 'cloudinary' : 'firebase',
+    cloudinaryConfigured: IS_CLOUDINARY_CONFIGURED,
+    cloudName: CLOUDINARY_CLOUD_NAME || null,
+  }),
+
   /**
    * Upload a user profile photo.
    * @param {string} uid
@@ -92,9 +204,15 @@ export const storageService = {
    * @param {function} [onProgress]
    */
   uploadProfilePhoto: async (uid, file, onProgress) => {
+    const activeUid = resolveActiveUid(uid);
     const ext = getFileExtension(file, 'jpg');
-    const path = `users/${uid}/profile_${Date.now()}.${ext}`;
-    return uploadToStorage(file, path, onProgress);
+    return uploadMedia({
+      file,
+      path: `users/${activeUid}/profile_${Date.now()}.${ext}`,
+      folder: `deckknob/users/${activeUid}`,
+      resourceType: 'image',
+      onProgress,
+    });
   },
 
   /**
@@ -104,10 +222,17 @@ export const storageService = {
    * @param {function} [onProgress]
    */
   uploadPostMedia: async (uid, file, onProgress) => {
-    const defaultExt = file?.type?.startsWith('video') ? 'mp4' : 'jpg';
+    const activeUid = resolveActiveUid(uid);
+    const isVideo = file?.type?.startsWith('video');
+    const defaultExt = isVideo ? 'mp4' : 'jpg';
     const ext = getFileExtension(file, defaultExt);
-    const path = `posts/${uid}/media_${Date.now()}.${ext}`;
-    return uploadToStorage(file, path, onProgress);
+    return uploadMedia({
+      file,
+      path: `posts/${activeUid}/media_${Date.now()}.${ext}`,
+      folder: `deckknob/posts/${activeUid}`,
+      resourceType: isVideo ? 'video' : 'image',
+      onProgress,
+    });
   },
 
   /**
@@ -117,9 +242,15 @@ export const storageService = {
    * @param {function} [onProgress]
    */
   uploadReelVideo: async (uid, file, onProgress) => {
+    const activeUid = resolveActiveUid(uid);
     const ext = getFileExtension(file, 'mp4');
-    const path = `reels/${uid}/reel_${Date.now()}.${ext}`;
-    return uploadToStorage(file, path, onProgress);
+    return uploadMedia({
+      file,
+      path: `reels/${activeUid}/reel_${Date.now()}.${ext}`,
+      folder: `deckknob/reels/${activeUid}`,
+      resourceType: 'video',
+      onProgress,
+    });
   },
 
   /**
@@ -129,10 +260,17 @@ export const storageService = {
    * @param {function} [onProgress]
    */
   uploadStoryMedia: async (uid, file, onProgress) => {
-    const defaultExt = file?.type?.startsWith('video') ? 'mp4' : 'jpg';
+    const activeUid = resolveActiveUid(uid);
+    const isVideo = file?.type?.startsWith('video');
+    const defaultExt = isVideo ? 'mp4' : 'jpg';
     const ext = getFileExtension(file, defaultExt);
-    const path = `stories/${uid}/story_${Date.now()}.${ext}`;
-    return uploadToStorage(file, path, onProgress);
+    return uploadMedia({
+      file,
+      path: `stories/${activeUid}/story_${Date.now()}.${ext}`,
+      folder: `deckknob/stories/${activeUid}`,
+      resourceType: isVideo ? 'video' : 'image',
+      onProgress,
+    });
   },
 
   /**
@@ -142,8 +280,58 @@ export const storageService = {
    * @param {function} [onProgress]
    */
   uploadEventBanner: async (uid, file, onProgress) => {
+    const activeUid = resolveActiveUid(uid);
     const ext = getFileExtension(file, 'jpg');
-    const path = `events/${uid}/banner_${Date.now()}.${ext}`;
-    return uploadToStorage(file, path, onProgress);
+    return uploadMedia({
+      file,
+      path: `events/${activeUid}/banner_${Date.now()}.${ext}`,
+      folder: `deckknob/events/${activeUid}`,
+      resourceType: 'image',
+      onProgress,
+    });
+  },
+
+  /**
+   * Upload a DJ audio demo track.
+   * Supports MP3, WAV, M4A, OGG, AAC up to 25MB.
+   * Cloudinary accepts audio files via the 'video' resource type.
+   */
+  uploadAudioDemo: async (uid, file, onProgress) => {
+    const activeUid = resolveActiveUid(uid);
+    if (!file) throw new Error('No audio file provided.');
+
+    const MAX_SIZE = 25 * 1024 * 1024; // 25MB limit
+    if (file.size && file.size > MAX_SIZE) {
+      throw new Error(`Audio file size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 25MB limit.`);
+    }
+
+    const ext = getFileExtension(file, 'mp3');
+    const validAudioExts = ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'];
+    if (!validAudioExts.includes(ext.toLowerCase())) {
+      throw new Error(`Unsupported audio format: .${ext}. Supported formats: MP3, WAV, M4A, OGG, AAC.`);
+    }
+
+    return uploadMedia({
+      file,
+      path: `demos/${activeUid}/demo_${Date.now()}.${ext}`,
+      folder: `deckknob/demos/${activeUid}`,
+      resourceType: 'video', // Cloudinary video endpoint processes audio
+      onProgress,
+    });
+  },
+
+  /**
+   * Upload playlist cover artwork.
+   */
+  uploadPlaylistCover: async (uid, file, onProgress) => {
+    const activeUid = resolveActiveUid(uid);
+    const ext = getFileExtension(file, 'jpg');
+    return uploadMedia({
+      file,
+      path: `playlists/${activeUid}/cover_${Date.now()}.${ext}`,
+      folder: `deckknob/playlists/${activeUid}`,
+      resourceType: 'image',
+      onProgress,
+    });
   },
 };

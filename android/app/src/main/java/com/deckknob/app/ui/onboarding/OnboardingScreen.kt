@@ -30,8 +30,10 @@ fun OnboardingScreen(
     onFinished: () -> Unit,
     viewModel: OnboardingViewModel = hiltViewModel()
 ) {
-    if (viewModel.onboardingFinished) {
-        onFinished()
+    LaunchedEffect(viewModel.onboardingFinished) {
+        if (viewModel.onboardingFinished) {
+            onFinished()
+        }
     }
 
     Column(
@@ -115,7 +117,7 @@ fun AvatarStep(viewModel: OnboardingViewModel) {
                     model = viewModel.profilePic,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Cover
+                    contentScale = ContentScale.Crop
                 )
             } else {
                 Text("TAP TO UPLOAD", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -142,6 +144,7 @@ fun CityStep(viewModel: OnboardingViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GenreStep(viewModel: OnboardingViewModel) {
     Column {
@@ -169,22 +172,6 @@ fun GenreStep(viewModel: OnboardingViewModel) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FlowRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable () -> Unit
-) {
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement,
-        content = { content() }
-    )
 }
 
 @Composable

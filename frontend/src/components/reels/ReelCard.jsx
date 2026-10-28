@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
+import AnimatedFireButton from '../common/AnimatedFireButton';
 
 export default function ReelCard({ reel }) {
   const [liked, setLiked] = useState(reel.is_liked);
@@ -10,7 +11,15 @@ export default function ReelCard({ reel }) {
       <img src={reel.poster} alt={reel.caption} className="h-full w-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-black/20" />
       <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-6">
-        <Action icon="heart" active={liked} label={reel.likes_count + (liked ? 1 : 0)} onClick={() => setLiked((value) => !value)} />
+        <AnimatedFireButton
+          isLiked={liked}
+          count={reel.likes_count + (liked ? 1 : 0)}
+          showCount={true}
+          countDirection="bottom"
+          size="lg"
+          onToggle={() => setLiked((value) => !value)}
+          ariaLabel={liked ? 'Remove Fire' : 'Add Fire'}
+        />
         <Action icon="comment" label={reel.comments_count} />
         <Action icon="send" />
         <Action icon="save" active={saved} onClick={() => setSaved((value) => !value)} />
@@ -28,11 +37,15 @@ export default function ReelCard({ reel }) {
   );
 }
 
-function Action({ icon, active = false, label, onClick }) {
+function Action({ icon, emoji, active = false, label, onClick }) {
   return (
     <button onClick={onClick} className={`grid place-items-center gap-1 text-white ${active ? 'text-[#DFE104]' : ''}`}>
-      <span className="dk-button h-12 w-12 bg-black/35 backdrop-blur-md">
-        <IconsaxAnimated name={icon} size={26} filled={active} />
+      <span className="dk-button h-12 w-12 bg-black/35 backdrop-blur-md select-none">
+        {emoji ? (
+          <span className={`text-2xl transition-all ${active ? 'drop-shadow-[0_0_12px_rgba(255,100,0,0.85)] scale-110' : 'grayscale contrast-75 opacity-80'}`}>{emoji}</span>
+        ) : (
+          <IconsaxAnimated name={icon} size={26} filled={active} />
+        )}
       </span>
       {label != null && <span className="text-xs font-bold">{Number(label).toLocaleString()}</span>}
     </button>

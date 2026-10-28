@@ -22,12 +22,16 @@ const useReelStore = create((set, get) => ({
       
       const newLastDoc = results.length > 0 ? results[results.length - 1].docSnapshot : null;
 
-      set((state) => ({
-        reels: [...state.reels, ...results],
-        lastDocSnapshot: newLastDoc,
-        hasMore: results.length === 6,
-        isLoading: false,
-      }));
+      set((state) => {
+        const existingIds = new Set(state.reels.map((r) => r.id));
+        const uniqueResults = results.filter((r) => r.id && !existingIds.has(r.id));
+        return {
+          reels: [...state.reels, ...uniqueResults],
+          lastDocSnapshot: newLastDoc,
+          hasMore: results.length === 6,
+          isLoading: false,
+        };
+      });
     } catch (err) {
       console.error('[reelStore] fetchReels error:', err);
       set({ isLoading: false });

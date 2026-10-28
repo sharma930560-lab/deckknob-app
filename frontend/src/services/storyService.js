@@ -15,6 +15,7 @@ import {
   deleteDoc,
   addDoc
 } from 'firebase/firestore';
+import { validatePublishing, LicensingValidationError } from './musicService';
 
 function parseTimestampMillis(ts) {
   if (!ts) return 0;
@@ -33,6 +34,16 @@ export const storyService = {
   // Create Story with overlays, tags, location, scheduled time, and music
   createStory: async (currentUid, username, avatar, mediaUrl, mediaType = 'image', options = {}) => {
     try {
+      if (options.music) {
+        const rights = validatePublishing(options.music);
+        if (!rights.cleared) {
+          throw new LicensingValidationError(
+            `Story music publishing rejected: ${rights.rejectionReason}`,
+            options.music.rightsEvidence || null
+          );
+        }
+      }
+
       const storiesRef = collection(db, 'stories');
       const newStoryRef = doc(storiesRef);
       

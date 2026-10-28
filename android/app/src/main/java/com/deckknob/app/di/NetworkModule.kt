@@ -1,5 +1,6 @@
 package com.deckknob.app.di
 
+import com.deckknob.app.BuildConfig
 import com.deckknob.app.network.AuthApi
 import com.deckknob.app.network.AuthInterceptor
 import com.google.gson.Gson
@@ -17,7 +18,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://10.0.2.2:8000/"
+    val BASE_URL: String get() = BuildConfig.BASE_URL
 
     @Provides
     @Singleton

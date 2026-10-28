@@ -64,6 +64,18 @@ class RegisterViewModel @Inject constructor(
     }
 
     fun onRegisterClick() {
+        if (username.length < 3) {
+            error = "Username must be at least 3 characters"
+            return
+        }
+        if (email.isBlank() || !email.contains("@")) {
+            error = "Please enter a valid email address"
+            return
+        }
+        if (password.length < 6) {
+            error = "Password must be at least 6 characters"
+            return
+        }
         if (isUsernameAvailable == false) {
             error = "Please choose an available username"
             return

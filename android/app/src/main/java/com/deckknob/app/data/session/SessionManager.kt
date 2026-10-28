@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.deckknob.app.data.model.AuthResponse
 import com.deckknob.app.data.model.UserDto
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -24,54 +23,55 @@ class SessionManager @Inject constructor(
     private val SESSIONS_KEY = stringPreferencesKey("user_sessions")
     private val ACTIVE_USER_ID_KEY = stringPreferencesKey("active_user_id")
 
-    val sessions: Flow<List<UserSession>> = context.dataStore.data.map { prefs ->
+    val sessions: Flow<List<UserDto>> = context.dataStore.data.map { prefs ->
         val json = prefs[SESSIONS_KEY] ?: "[]"
-        val type = object : TypeToken<List<UserSession>>() {}.type
+        val type = object : TypeToken<List<UserDto>>() {}.type
         gson.fromJson(json, type)
     }
 
-    val activeSession: Flow<UserSession?> = context.dataStore.data.map { prefs ->
+    val activeUserId: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[ACTIVE_USER_ID_KEY]
+    }
+
+    val activeSession: Flow<UserDto?> = context.dataStore.data.map { prefs ->
+        val activeUid = prefs[ACTIVE_USER_ID_KEY] ?: return@map null
         val json = prefs[SESSIONS_KEY] ?: "[]"
-        val activeId = prefs[ACTIVE_USER_ID_KEY]
-        val type = object : TypeToken<List<UserSession>>() {}.type
-        val list: List<UserSession> = gson.fromJson(json, type)
-        list.find { it.user.id.toString() == activeId } ?: list.firstOrNull()
+        val type = object : TypeToken<List<UserDto>>() {}.type
+        val list: List<UserDto> = gson.fromJson(json, type)
+        list.firstOrNull { it.uid == activeUid }
     }
 
-    suspend fun saveSession(authResponse: AuthResponse) {
+    suspend fun saveSession(user: UserDto) {
         context.dataStore.edit { prefs ->
             val json = prefs[SESSIONS_KEY] ?: "[]"
-            val type = object : TypeToken<MutableList<UserSession>>() {}.type
-            val list: MutableList<UserSession> = gson.fromJson(json, type)
+            val type = object : TypeToken<MutableList<UserDto>>() {}.type
+            val list: MutableList<UserDto> = gson.fromJson(json, type)
 
-            // Remove if exists
-            list.removeAll { it.user.id == authResponse.user.id }
-            
-            // Add new
-            list.add(UserSession(authResponse.user, authResponse.access, authResponse.refresh))
+            list.removeAll { it.uid == user.uid }
+            list.add(user)
             
             prefs[SESSIONS_KEY] = gson.toJson(list)
-            prefs[ACTIVE_USER_ID_KEY] = authResponse.user.id.toString()
+            prefs[ACTIVE_USER_ID_KEY] = user.uid
         }
     }
 
-    suspend fun switchAccount(userId: Int) {
+    suspend fun switchAccount(uid: String) {
         context.dataStore.edit { prefs ->
-            prefs[ACTIVE_USER_ID_KEY] = userId.toString()
+            prefs[ACTIVE_USER_ID_KEY] = uid
         }
     }
 
-    suspend fun logout(userId: Int) {
+    suspend fun logout(uid: String) {
         context.dataStore.edit { prefs ->
             val json = prefs[SESSIONS_KEY] ?: "[]"
-            val type = object : TypeToken<MutableList<UserSession>>() {}.type
-            val list: MutableList<UserSession> = gson.fromJson(json, type)
+            val type = object : TypeToken<MutableList<UserDto>>() {}.type
+            val list: MutableList<UserDto> = gson.fromJson(json, type)
             
-            list.removeAll { it.user.id == userId }
+            list.removeAll { it.uid == uid }
             prefs[SESSIONS_KEY] = gson.toJson(list)
             
-            if (prefs[ACTIVE_USER_ID_KEY] == userId.toString()) {
-                prefs[ACTIVE_USER_ID_KEY] = list.firstOrNull()?.user?.id?.toString() ?: ""
+            if (prefs[ACTIVE_USER_ID_KEY] == uid) {
+                prefs[ACTIVE_USER_ID_KEY] = list.firstOrNull()?.uid ?: ""
             }
         }
     }
@@ -80,9 +80,3 @@ class SessionManager @Inject constructor(
         context.dataStore.edit { it.clear() }
     }
 }
-
-data class UserSession(
-    val user: UserDto,
-    val accessToken: String,
-    val refreshToken: String
-)

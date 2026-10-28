@@ -23,6 +23,10 @@ import Events from './pages/Events';
 import EventDetail from './pages/EventDetail';
 
 import VenueDetail from './pages/VenueDetail';
+import Messages from './pages/Messages';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -34,6 +38,10 @@ function AnimatedRoutes() {
         <Route path="/signup" element={<Register />} />
         <Route path="/register" element={<Navigate to="/signup" replace />} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/action" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
         <Route element={<MainLayout />}>
           <Route path="/" element={<Navigate to="/feed" replace />} />
@@ -50,6 +58,7 @@ function AnimatedRoutes() {
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/create-event" element={<CreateEvent />} />
           <Route path="/venues/:id" element={<VenueDetail />} />
+          <Route path="/messages" element={<Messages />} />
         </Route>
 
         {/* Catch-all → login */}

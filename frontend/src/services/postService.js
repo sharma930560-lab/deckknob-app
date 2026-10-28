@@ -1,4 +1,4 @@
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import {
   collection,
   doc,
@@ -16,6 +16,7 @@ import {
   increment,
   serverTimestamp
 } from 'firebase/firestore';
+import { validatePublishing, LicensingValidationError } from './musicService';
 
 function parseTimestampMillis(ts) {
   if (!ts) return 0;
@@ -33,6 +34,21 @@ function parseTimestampMillis(ts) {
 export const postService = {
   createPost: async (currentUid, username, avatar, role, mediaUrl, mediaType, caption, options = {}) => {
     try {
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid) {
+        throw new Error('Authentication required: user must be logged in to create a post.');
+      }
+
+      if (options.music) {
+        const rights = validatePublishing(options.music);
+        if (!rights.cleared) {
+          throw new LicensingValidationError(
+            `Post music publishing rejected: ${rights.rejectionReason}`,
+            options.music.rightsEvidence || null
+          );
+        }
+      }
+
       const postsRef = collection(db, 'posts');
       const newPostRef = doc(postsRef);
 
@@ -42,10 +58,11 @@ export const postService = {
 
       const postData = {
         id: newPostRef.id,
-        authorId: currentUid,
-        authorUsername: username,
+        authorId: activeUid,
+        authorUsername: username || auth.currentUser?.displayName || 'selector',
         authorAvatar: avatar || '',
         authorRole: role || 'dj',
+        genre: options.genre || 'all',
         media_url: mediaUrl,
         mediaUrl: mediaUrl,
         media_type: mediaType || 'image', // 'image' | 'video'
@@ -55,6 +72,7 @@ export const postService = {
         comments_count: 0,
         taggedUsers: options.taggedUsers || [],
         mentionedUsernames,
+        music: options.music || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -63,7 +81,7 @@ export const postService = {
       
       // Update user posts count
       try {
-        await updateDoc(doc(db, 'users', currentUid), {
+        await updateDoc(doc(db, 'users', activeUid), {
           postsCount: increment(1)
         });
       } catch (err) {
@@ -78,7 +96,7 @@ export const postService = {
               postId: newPostRef.id,
               mentionedUid: tagged.uid || '',
               mentionedUsername: tagged.username || '',
-              authorId: currentUid,
+              authorId: activeUid,
               authorUsername: username,
               type: 'post',
               createdAt: serverTimestamp()
@@ -124,21 +142,55 @@ export const postService = {
       }
 
       const posts = [];
+      const activeUid = auth.currentUser?.uid || currentUid;
+
+      // Retrieve IDs of users blocked by active user
+      let blockedUserIds = new Set();
+      let followingUserIds = new Set();
+
+      if (activeUid) {
+        try {
+          const blockedSnap = await getDocs(collection(db, 'blocked', activeUid, 'blockedUsers'));
+          blockedSnap.forEach(d => blockedUserIds.add(d.data().targetUid || d.id));
+        } catch { /* non-fatal */ }
+
+        // Fetch followed users to personalize feed prioritization
+        try {
+          const followingSnap = await getDocs(collection(db, 'following', activeUid, 'userFollowing'));
+          followingSnap.forEach(d => followingUserIds.add(d.data().targetUid || d.id));
+        } catch { /* non-fatal */ }
+      }
       
       for (const postDoc of snapshot.docs) {
         const data = postDoc.data();
         const postId = postDoc.id;
+        const authorId = data.authorId;
+
+        // Skip post if author is in current user's blocked list
+        if (authorId && blockedUserIds.has(authorId)) {
+          continue;
+        }
+
+        // Check if author has blocked current user
+        if (activeUid && authorId && activeUid !== authorId) {
+          try {
+            const authorBlockSnap = await getDoc(doc(db, 'blocked', authorId, 'blockedUsers', activeUid));
+            if (authorBlockSnap.exists()) {
+              continue; // Skip post if author blocked current user
+            }
+          } catch { /* non-fatal */ }
+        }
         
         let isLiked = false;
         let isBookmarked = false;
         
-        if (currentUid) {
+        if (activeUid && postId) {
           try {
-            const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+            const likeRef = doc(db, 'likes', `${postId}_${activeUid}`);
             const likeSnap = await getDoc(likeRef);
             isLiked = likeSnap.exists();
             
-            const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
+            const saveRef = doc(db, 'savedPosts', `${postId}_${activeUid}`);
             const saveSnap = await getDoc(saveRef);
             isBookmarked = saveSnap.exists();
           } catch { /* non-fatal */ }
@@ -146,9 +198,11 @@ export const postService = {
         
         const mediaUrl = data.media_url || data.mediaUrl || '';
         const mediaType = data.media_type || data.mediaType || 'image';
+        const isFromFollowed = Boolean(authorId && (followingUserIds.has(authorId) || authorId === activeUid));
 
         posts.push({
           id: postId,
+          genre: data.genre || 'all',
           media_url: mediaUrl,
           mediaUrl: mediaUrl,
           media_type: mediaType,
@@ -158,6 +212,11 @@ export const postService = {
           comments_count: data.comments_count ?? 0,
           is_liked: isLiked,
           is_bookmarked: isBookmarked,
+          is_from_followed: isFromFollowed,
+          isFromFollowed: isFromFollowed,
+          music: data.music || null,
+          taggedUsers: data.taggedUsers || [],
+          mentionedUsernames: data.mentionedUsernames || [],
           createdAt: data.createdAt,
           user: {
             id: data.authorId,
@@ -170,8 +229,10 @@ export const postService = {
         });
       }
 
-      // Sort client-side
+      // Sort client-side: prioritize followed users, then recency
       posts.sort((a, b) => {
+        if (a.isFromFollowed && !b.isFromFollowed) return -1;
+        if (!a.isFromFollowed && b.isFromFollowed) return 1;
         return parseTimestampMillis(b.createdAt) - parseTimestampMillis(a.createdAt);
       });
       
@@ -189,14 +250,18 @@ export const postService = {
       let targetUid = usernameOrUid;
 
       // Check if usernameOrUid is a UID in users table
-      const userDirectSnap = await getDoc(doc(db, 'users', usernameOrUid));
-      if (!userDirectSnap.exists()) {
-        // Look up by username
-        const usernameDoc = await getDoc(doc(db, 'usernames', usernameOrUid.toLowerCase().trim()));
-        if (usernameDoc.exists()) {
-          targetUid = usernameDoc.data().uid;
+      try {
+        const userDirectSnap = await getDoc(doc(db, 'users', usernameOrUid));
+        if (userDirectSnap.exists()) {
+          targetUid = usernameOrUid;
+        } else {
+          // Look up by username
+          const usernameDoc = await getDoc(doc(db, 'usernames', usernameOrUid.toLowerCase().trim()));
+          if (usernameDoc.exists()) {
+            targetUid = usernameDoc.data().uid;
+          }
         }
-      }
+      } catch { /* fallback */ }
 
       let snapshot;
       try {
@@ -216,6 +281,7 @@ export const postService = {
       }
 
       const posts = [];
+      const activeUid = auth.currentUser?.uid || currentUid;
       
       for (const postDoc of snapshot.docs) {
         const data = postDoc.data();
@@ -224,13 +290,13 @@ export const postService = {
         let isLiked = false;
         let isBookmarked = false;
         
-        if (currentUid) {
+        if (activeUid && postId) {
           try {
-            const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+            const likeRef = doc(db, 'likes', `${postId}_${activeUid}`);
             const likeSnap = await getDoc(likeRef);
             isLiked = likeSnap.exists();
             
-            const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
+            const saveRef = doc(db, 'savedPosts', `${postId}_${activeUid}`);
             const saveSnap = await getDoc(saveRef);
             isBookmarked = saveSnap.exists();
           } catch { /* non-fatal */ }
@@ -241,6 +307,7 @@ export const postService = {
 
         posts.push({
           id: postId,
+          genre: data.genre || 'all',
           media_url: mediaUrl,
           mediaUrl: mediaUrl,
           media_type: mediaType,
@@ -250,13 +317,16 @@ export const postService = {
           comments_count: data.comments_count ?? 0,
           is_liked: isLiked,
           is_bookmarked: isBookmarked,
+          music: data.music || null,
+          taggedUsers: data.taggedUsers || [],
+          mentionedUsernames: data.mentionedUsernames || [],
           createdAt: data.createdAt,
           user: {
             id: data.authorId,
-            username: data.authorUsername,
-            profile_pic: data.authorAvatar,
-            profilePic: data.authorAvatar,
-            role: data.authorRole
+            username: data.authorUsername || 'selector',
+            profile_pic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername || 'U'}&background=DFE104&color=000&bold=true`,
+            profilePic: data.authorAvatar || `https://ui-avatars.com/api/?name=${data.authorUsername || 'U'}&background=DFE104&color=000&bold=true`,
+            role: data.authorRole || 'dj'
           }
         });
       }
@@ -275,11 +345,22 @@ export const postService = {
 
   likePost: async (postId, currentUid) => {
     try {
-      const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid) {
+        throw new Error('Authentication required to like a post.');
+      }
+      if (!postId) return;
+
+      const likeRef = doc(db, 'likes', `${postId}_${activeUid}`);
+      const existingLike = await getDoc(likeRef);
+      if (existingLike.exists()) {
+        return; // Already liked, avoid duplicate count increment
+      }
+
       await setDoc(likeRef, {
         targetId: postId,
         targetType: 'post',
-        userId: currentUid,
+        userId: activeUid,
         createdAt: serverTimestamp()
       });
       
@@ -295,7 +376,15 @@ export const postService = {
 
   unlikePost: async (postId, currentUid) => {
     try {
-      const likeRef = doc(db, 'likes', `${postId}_${currentUid}`);
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid || !postId) return;
+
+      const likeRef = doc(db, 'likes', `${postId}_${activeUid}`);
+      const existingLike = await getDoc(likeRef);
+      if (!existingLike.exists()) {
+        return; // Not liked, avoid duplicate count decrement
+      }
+
       await deleteDoc(likeRef);
       
       const postRef = doc(db, 'posts', postId);
@@ -310,10 +399,13 @@ export const postService = {
 
   bookmarkPost: async (postId, currentUid, isBookmarked) => {
     try {
-      const saveRef = doc(db, 'savedPosts', `${postId}_${currentUid}`);
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid || !postId) return;
+
+      const saveRef = doc(db, 'savedPosts', `${postId}_${activeUid}`);
       if (isBookmarked) {
         await setDoc(saveRef, {
-          userId: currentUid,
+          userId: activeUid,
           postId,
           createdAt: serverTimestamp()
         });
@@ -328,6 +420,7 @@ export const postService = {
 
   getComments: async (postId) => {
     try {
+      if (!postId) return [];
       const commentsRef = collection(db, 'posts', postId, 'comments');
       const q = query(commentsRef, orderBy('createdAt', 'asc'));
       const snapshot = await getDocs(q);
@@ -344,19 +437,38 @@ export const postService = {
 
   addComment: async (postId, currentUid, username, avatar, text) => {
     try {
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid) {
+        throw new Error('Authentication required to comment.');
+      }
+      if (!postId || !text?.trim()) return null;
+
+      // Privacy / Blocking check: Verify neither commenter nor post author is blocked
+      const postRef = doc(db, 'posts', postId);
+      const postSnap = await getDoc(postRef);
+      if (postSnap.exists()) {
+        const authorId = postSnap.data().authorId;
+        if (authorId && authorId !== activeUid) {
+          const isBlocked1 = await getDoc(doc(db, 'blocked', authorId, 'blockedUsers', activeUid));
+          const isBlocked2 = await getDoc(doc(db, 'blocked', activeUid, 'blockedUsers', authorId));
+          if (isBlocked1.exists() || isBlocked2.exists()) {
+            throw new Error('Cannot comment: communication restricted.');
+          }
+        }
+      }
+
       const commentsRef = collection(db, 'posts', postId, 'comments');
       const commentData = {
-        authorId: currentUid,
-        authorUsername: username,
+        authorId: activeUid,
+        authorUsername: username || auth.currentUser?.displayName || 'selector',
         authorAvatar: avatar || '',
-        text,
+        text: text.trim(),
         createdAt: serverTimestamp()
       };
       
       const commentDocRef = await addDoc(commentsRef, commentData);
       
       // Increment comment count on post
-      const postRef = doc(db, 'posts', postId);
       await updateDoc(postRef, {
         comments_count: increment(1)
       });
@@ -370,11 +482,14 @@ export const postService = {
 
   deletePost: async (postId, currentUid) => {
     try {
+      const activeUid = auth.currentUser?.uid || currentUid;
+      if (!activeUid || !postId) return;
+
       const postRef = doc(db, 'posts', postId);
       const postSnap = await getDoc(postRef);
-      if (postSnap.exists() && postSnap.data().authorId === currentUid) {
+      if (postSnap.exists() && postSnap.data().authorId === activeUid) {
         await deleteDoc(postRef);
-        await updateDoc(doc(db, 'users', currentUid), {
+        await updateDoc(doc(db, 'users', activeUid), {
           postsCount: increment(-1)
         });
       }

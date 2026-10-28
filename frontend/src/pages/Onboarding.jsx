@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authStore from '../stores/authStore';
+import { auth } from '../config/firebase';
 import { storageService } from '../services/storageService';
 
 const genres = [
@@ -130,11 +131,20 @@ export default function Onboarding() {
 
   const finishOnboarding = async () => {
     try {
-      // profilePic is already compressed to ~200x200 (≤ 15KB base64),
-      // safe to store directly in Firestore without hitting the 1MB limit.
+      let finalPic = profilePic || '';
+      if (finalPic && finalPic.startsWith('data:')) {
+        const uid = auth.currentUser?.uid || user?.uid;
+        if (uid) {
+          try {
+            finalPic = await storageService.uploadProfilePhoto(uid, finalPic);
+          } catch (storageErr) {
+            console.warn('Storage upload fallback to base64/local:', storageErr);
+          }
+        }
+      }
       await updateProfile({
-        profilePic: profilePic || '',
-        profile_pic: profilePic || '',
+        profilePic: finalPic,
+        profile_pic: finalPic,
         bio,
         city,
         genre,

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "408445559473",
+    "project_id": "deckknob-684f7",
+    "storage_bucket": "deckknob-684f7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408445559473:android:a249490e34e358aa31f890",
+        "android_client_info": {
+          "package_name": "com.deckknob.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "408445559473-tlmpp8gtldslsee3ntspvnt0kq4s0q6e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.deckknob.app",
+            "certificate_hash": "fab06108089b72885e3c2c7d684792d98ad23e5f"
+          }
+        },
+        {
+          "client_id": "408445559473-tc3br0kd8iu2in52m3uohgdqmnp80nu8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdk52i2ssGBk_To64W5ssmuAahSa5uu-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "408445559473-tc3br0kd8iu2in52m3uohgdqmnp80nu8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

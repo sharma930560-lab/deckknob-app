@@ -53,3 +53,11 @@ backend/media/
 *.m4v
 *.mov
 
+# Firebase CLI cache
+.firebase/
+
+# Local Android properties
+android/local.properties
+local.properties
+
+

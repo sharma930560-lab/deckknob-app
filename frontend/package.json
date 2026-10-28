@@ -16,8 +16,8 @@
     "firebase": "^12.15.0",
     "framer-motion": "^12.39.0",
     "lucide-react": "^1.11.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-fast-marquee": "^1.6.5",
     "react-router-dom": "^7.14.2",
     "zustand": "^5.0.12"
@@ -34,6 +34,7 @@
     "globals": "^17.5.0",
     "postcss": "^8.5.12",
     "tailwindcss": "^4.2.4",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "zod": "^4.0.0"
   }
 }

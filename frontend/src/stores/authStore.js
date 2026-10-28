@@ -1,21 +1,19 @@
 import { create } from 'zustand';
-import { authService } from '../services/authService';
+import { authService, formatAuthError } from '../services/authService';
 import { auth, db } from '../config/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 
 const authStore = create((set, get) => ({
-  // State
+  // State: single authoritative user
   user: null,
-  accounts: [], // Array of sessions for compat: [{ user }]
   isLoading: true,
   error: null,
   isAuthenticated: false,
 
   // Actions
   setUser: (user) => set({ 
-    user, 
+    user: user ? { uid: user.uid, ...user } : null, 
     isAuthenticated: !!user,
-    accounts: user ? [{ user }] : [],
     isLoading: false 
   }),
   
@@ -31,23 +29,22 @@ const authStore = create((set, get) => ({
       set({ isLoading: true });
       const unsubscribe = authService.onAuthChange((user) => {
         if (user) {
+          const normalized = { uid: user.uid, ...user };
           set({ 
-            user, 
-            accounts: [{ user }], 
+            user: normalized, 
             isAuthenticated: true, 
             isLoading: false 
           });
+          resolve(normalized);
         } else {
           set({ 
             user: null, 
-            accounts: [], 
             isAuthenticated: false, 
             isLoading: false 
           });
+          resolve(null);
         }
-        resolve(user);
       });
-      // Stash unsubscribe function if needed, but standard auth state handles unmounts.
     });
   },
 
@@ -55,41 +52,23 @@ const authStore = create((set, get) => ({
   login: async (usernameOrEmail, password) => {
     try {
       set({ isLoading: true, error: null });
+      const firebaseUser = await authService.signInWithEmail(usernameOrEmail, password);
       
-      let email = usernameOrEmail;
-      if (!usernameOrEmail.includes('@')) {
-        const usernameDocRef = doc(db, 'usernames', usernameOrEmail.toLowerCase().trim());
-        const usernameSnap = await getDoc(usernameDocRef);
-        if (usernameSnap.exists()) {
-          const uid = usernameSnap.data().uid;
-          const userDocRef = doc(db, 'users', uid);
-          const userSnap = await getDoc(userDocRef);
-          if (userSnap.exists()) {
-            email = userSnap.data().email;
-          } else {
-            throw new Error('User profile record not found.');
-          }
-        } else {
-          throw new Error('Username not found.');
-        }
-      }
-
-      const firebaseUser = await authService.signInWithEmail(email, password);
-      // Wait for auth state listener to populate user profile
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const userSnap = await getDoc(userDocRef);
-      const user = userSnap.data();
+      const profileData = userSnap.exists() ? userSnap.data() : {};
+      const user = { uid: firebaseUser.uid, email: firebaseUser.email, emailVerified: firebaseUser.emailVerified, ...profileData };
 
       set({ 
         user, 
-        accounts: [{ user }], 
         isAuthenticated: true, 
         isLoading: false 
       });
       return user;
     } catch (error) {
-      set({ error: error.message, isLoading: false });
-      throw error;
+      const friendlyMessage = formatAuthError(error);
+      set({ error: friendlyMessage, isLoading: false });
+      throw new Error(friendlyMessage);
     }
   },
 
@@ -100,41 +79,43 @@ const authStore = create((set, get) => ({
       const firebaseUser = await authService.signInWithGoogle();
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const userSnap = await getDoc(userDocRef);
-      const user = userSnap.data();
+      const profileData = userSnap.exists() ? userSnap.data() : {};
+      const user = { uid: firebaseUser.uid, email: firebaseUser.email, emailVerified: firebaseUser.emailVerified, ...profileData };
 
       set({ 
         user, 
-        accounts: [{ user }], 
         isAuthenticated: true, 
         isLoading: false 
       });
       return user;
     } catch (error) {
-      set({ error: error.message, isLoading: false });
-      throw error;
+      const friendlyMessage = formatAuthError(error);
+      set({ error: friendlyMessage, isLoading: false });
+      throw new Error(friendlyMessage);
     }
   },
 
-  // Register
-  register: async (username, email, password, role = 'fan', bio = '') => {
+  // Register (single account per email)
+  register: async (username, email, password, role = 'fan', name = '') => {
     try {
       set({ isLoading: true, error: null });
-      const firebaseUser = await authService.signUpWithEmail(email, password, username, role);
+      const firebaseUser = await authService.signUpWithEmail(email, password, username, role, name);
       
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const userSnap = await getDoc(userDocRef);
-      const user = userSnap.data();
+      const profileData = userSnap.exists() ? userSnap.data() : {};
+      const user = { uid: firebaseUser.uid, email: firebaseUser.email, emailVerified: firebaseUser.emailVerified, ...profileData };
 
       set({ 
         user, 
-        accounts: [{ user }], 
         isAuthenticated: true, 
         isLoading: false 
       });
       return user;
     } catch (error) {
-      set({ error: error.message, isLoading: false });
-      throw error;
+      const friendlyMessage = formatAuthError(error);
+      set({ error: friendlyMessage, isLoading: false });
+      throw new Error(friendlyMessage);
     }
   },
 
@@ -142,16 +123,17 @@ const authStore = create((set, get) => ({
   updateProfile: async (data) => {
     try {
       set({ isLoading: true, error: null });
-      const currentUser = get().user;
-      if (!currentUser || !currentUser.uid) {
+      const activeUid = auth.currentUser?.uid || get().user?.uid;
+      if (!activeUid) {
         throw new Error('User not logged in.');
       }
       
-      const userDocRef = doc(db, 'users', currentUser.uid);
+      const userDocRef = doc(db, 'users', activeUid);
+      const currentUser = get().user || {};
       
       // Handle username change
       if (data.username && data.username !== currentUser.username) {
-        const newUsername = data.username.toLowerCase().trim().replace(/\s/g, '_');
+        const newUsername = data.username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
         const newUsernameRef = doc(db, 'usernames', newUsername);
         const checkSnap = await getDoc(newUsernameRef);
         
@@ -160,7 +142,7 @@ const authStore = create((set, get) => ({
         }
 
         // Set the new username mapping
-        await setDoc(newUsernameRef, { uid: currentUser.uid });
+        await setDoc(newUsernameRef, { uid: activeUid });
 
         // Delete old username mapping if it existed
         if (currentUser.username) {
@@ -168,7 +150,14 @@ const authStore = create((set, get) => ({
           await deleteDoc(oldUsernameRef);
         }
         
-        data.username = newUsername; // Ensure cleaned username is saved to user doc
+        data.username = newUsername;
+      }
+
+      // Sync both profilePic and profile_pic for Web and Android parity
+      if (data.profilePic !== undefined && data.profile_pic === undefined) {
+        data.profile_pic = data.profilePic;
+      } else if (data.profile_pic !== undefined && data.profilePic === undefined) {
+        data.profilePic = data.profile_pic;
       }
 
       // Clean undefined fields
@@ -183,11 +172,10 @@ const authStore = create((set, get) => ({
       await updateDoc(userDocRef, cleanData);
       
       const userSnap = await getDoc(userDocRef);
-      const updatedUser = userSnap.data();
+      const updatedUser = { uid: activeUid, ...userSnap.data() };
 
       set({ 
         user: updatedUser, 
-        accounts: [{ user: updatedUser }], 
         isLoading: false 
       });
       return updatedUser;
@@ -197,26 +185,10 @@ const authStore = create((set, get) => ({
     }
   },
 
-  // Switch active account session (Stubbed for single account)
-  switchAccount: async (username) => {
-    throw new Error('Multi-account switching is disabled under Firebase.');
-  },
-
-  // Logout current active account only
-  logoutCurrent: async () => {
-    await authService.signOut();
-    set({ user: null, accounts: [], isAuthenticated: false, error: null });
-  },
-
-  // Logout all accounts
-  logoutAll: async () => {
-    await authService.signOut();
-    set({ user: null, accounts: [], isAuthenticated: false, error: null });
-  },
-
-  // Default logout
+  // Logout
   logout: async () => {
-    await get().logoutAll();
+    await authService.signOut();
+    set({ user: null, isAuthenticated: false, error: null });
   },
 }));
 

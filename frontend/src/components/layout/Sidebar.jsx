@@ -6,6 +6,7 @@ const navItems = [
   { to: '/explore', label: 'Explore', icon: 'search' },
   { to: '/events', label: 'Events', icon: 'calendar' },
   { to: '/klyps', label: 'Klyps', icon: 'reel' },
+  { to: '/messages', label: 'Messages', icon: 'message' },
   { to: '/profile/me', label: 'Profile', icon: 'user' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ];

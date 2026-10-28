@@ -104,11 +104,17 @@ export default function TodayEvents({ mode = 'today' }) {
             <h1 className="kinetic-display mt-2 sm:mt-3" style={{ fontSize: 'clamp(2rem, 8vw, 14rem)' }}>{selected.title}</h1>
             <p className="mt-3 sm:mt-5 max-w-2xl text-sm sm:text-lg text-zinc-300">
               {selected.venue}{selected.city ? `, ${selected.city}` : ''}.
+              {selected.address && <span className="block text-sm text-zinc-400 mt-1">📍 {selected.address}</span>}
               {selected.lineup?.length > 0 && ` Featuring ${selected.lineup.join(', ')}.`}
             </p>
             <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 sm:gap-3">
+              {selected.directionsUrl && (
+                <a href={selected.directionsUrl} target="_blank" rel="noreferrer" className="dk-button bg-[#DFE104] px-4 sm:px-5 text-xs sm:text-sm font-black uppercase tracking-[0.12em] text-black">
+                  🗺️ Get Directions
+                </a>
+              )}
               {(selected.url || selected.ticketUrl) && (
-                <a href={selected.url || selected.ticketUrl} target="_blank" rel="noreferrer" className="dk-button bg-[#DFE104] px-4 sm:px-5 text-xs sm:text-sm font-black uppercase tracking-[0.12em] text-black">
+                <a href={selected.url || selected.ticketUrl} target="_blank" rel="noreferrer" className="dk-button bg-white/[0.08] hover:bg-white/[0.15] px-4 sm:px-5 text-xs sm:text-sm font-black uppercase tracking-[0.12em] text-white">
                   Visit Venue / Ticket Website
                 </a>
               )}

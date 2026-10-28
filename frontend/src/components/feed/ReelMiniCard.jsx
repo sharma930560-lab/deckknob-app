@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
+import AnimatedFireButton from '../common/AnimatedFireButton';
 import useReelStore from '../../stores/reelStore';
 
 export default function ReelMiniCard({ reel }) {
@@ -10,25 +11,52 @@ export default function ReelMiniCard({ reel }) {
   const [muted, setMuted] = useState(true);
   const { likeReel, unlikeReel, bookmarkReel } = useReelStore();
 
-  // Only play when ≥50% in viewport
+  // Only play when ≥70% in viewport and tab is visible
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    let isVisible = false;
+
+    const playSafe = () => {
+      if (isVisible && !document.hidden) {
+        video.play().then(() => setIsPlaying(true)).catch(() => {});
+      }
+    };
+
+    const pauseSafe = () => {
+      video.pause();
+      setIsPlaying(false);
+    };
+
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          video.play().then(() => setIsPlaying(true)).catch(() => {});
+        isVisible = entry.isIntersecting && entry.intersectionRatio >= 0.7;
+        if (isVisible) {
+          playSafe();
         } else {
-          video.pause();
-          setIsPlaying(false);
+          pauseSafe();
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.7 }
     );
 
+    const handleVisibility = () => {
+      if (document.hidden) {
+        pauseSafe();
+      } else if (isVisible) {
+        playSafe();
+      }
+    };
+
     observer.observe(video);
-    return () => observer.disconnect();
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      video.pause();
+    };
   }, []);
 
   const togglePlay = () => {
@@ -138,16 +166,15 @@ export default function ReelMiniCard({ reel }) {
 
         {/* Side actions */}
         <div className="absolute bottom-4 right-3 flex flex-col items-center gap-3">
-          <button
-            onClick={handleLikeToggle}
-            className={`flex flex-col items-center ${reel.is_liked ? 'text-[#DFE104]' : 'text-white'} active:scale-110 transition-transform`}
-            aria-label="Like"
-          >
-            <IconsaxAnimated name="heart" size={24} filled={reel.is_liked} />
-            <span className="text-[9px] font-bold mt-0.5">
-              {reel.likes_count >= 1000 ? `${(reel.likes_count / 1000).toFixed(1)}K` : reel.likes_count}
-            </span>
-          </button>
+          <AnimatedFireButton
+            isLiked={reel.is_liked}
+            count={reel.likes_count}
+            showCount={true}
+            countDirection="bottom"
+            size="sm"
+            onToggle={handleLikeToggle}
+            ariaLabel={reel.is_liked ? "Remove Fire" : "Add Fire"}
+          />
           <button
             onClick={(e) => { e.stopPropagation(); bookmarkReel(reel.id); }}
             className={`${reel.is_bookmarked ? 'text-[#DFE104]' : 'text-white'} active:scale-110 transition-transform`}

@@ -31,12 +31,14 @@ function buildFeedItems(posts, reels) {
   return items;
 }
 
-/* Filter feed items by genre keyword in caption */
+/* Filter feed items by genre (field match or keyword in caption) */
 function filterByGenre(items, genre) {
   if (!genre || genre === 'All') return items;
   const kw = genre.toLowerCase().replace(/\s+/g, '');
   const kw2 = genre.toLowerCase();
   return items.filter((item) => {
+    const itemGenre = (item.data.genre || '').toLowerCase();
+    if (itemGenre && (itemGenre === kw2 || itemGenre.includes(kw2) || itemGenre === kw)) return true;
     const caption = (item.data.caption || '').toLowerCase().replace(/\s+/g, '');
     return caption.includes(kw) || caption.includes(kw2) || caption.includes('#' + kw);
   });
@@ -210,11 +212,11 @@ export default function Feed() {
           )}
 
           {/* Render posts + interleaved reels */}
-          {feedItems.map((item) =>
+          {feedItems.map((item, idx) =>
             item.type === 'post' ? (
-              <PostCard key={`post-${item.data.id}`} post={item.data} />
+              <PostCard key={`post-${item.data.id || idx}-${idx}`} post={item.data} />
             ) : (
-              <ReelMiniCard key={`reel-${item.data.id}`} reel={item.data} />
+              <ReelMiniCard key={`reel-${item.data.id || idx}-${idx}`} reel={item.data} />
             )
           )}
 
@@ -243,7 +245,7 @@ export default function Feed() {
       <aside className="hidden space-y-5 lg:block">
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Tonight's Events</p>
-          <Link to="/events/today" className="text-xs font-bold text-[#DFE104]">See all</Link>
+          <Link to="/events" className="text-xs font-bold text-[#DFE104]">See all</Link>
         </div>
         {events.length === 0 && (
           <p className="text-xs text-zinc-600">No events scheduled tonight.</p>

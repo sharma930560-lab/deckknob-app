@@ -4,12 +4,14 @@ import { motion } from 'framer-motion';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
 
 const createOptions = [
-  { label: 'Post', description: 'Drop a photo, poster, or set clip', icon: 'image', path: '/upload' },
-  { label: 'Klyp', description: 'Publish a vertical moment', icon: 'reel', path: '/upload?type=reel' },
+  { label: 'Camera / Record', description: 'Instant live camera capture & recorder', icon: 'camera', action: 'camera' },
+  { label: 'Story (24H)', description: 'Ephemeral underground radar signal', icon: 'camera', action: 'story' },
+  { label: 'Post', description: 'Drop a photo or poster (Images only)', icon: 'image', path: '/upload' },
+  { label: 'Klyp', description: 'Vertical clip (Videos only — Max 59s)', icon: 'reel', path: '/upload?type=reel' },
   { label: 'Event', description: 'Promote a night or festival stage', icon: 'calendar', path: '/create-event' },
 ];
 
-export default function CreateSheet({ open, onClose }) {
+export default function CreateSheet({ open, onClose, onOpenCamera }) {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,7 +53,11 @@ export default function CreateSheet({ open, onClose }) {
               key={option.label}
               onClick={() => {
                 onClose();
-                navigate(option.path);
+                if (option.action === 'camera' || option.action === 'story') {
+                  onOpenCamera?.(option.action === 'camera' ? 'post' : 'story');
+                } else if (option.path) {
+                  navigate(option.path);
+                }
               }}
               className="group flex w-full items-center gap-4 rounded-3xl bg-white/[0.04] p-4 text-left transition-all hover:-translate-y-0.5 hover:bg-white/[0.08]"
             >

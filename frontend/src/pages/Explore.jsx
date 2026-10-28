@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import IconsaxAnimated from '../components/icons/IconsaxAnimated';
 import KineticMarquee from '../components/ui/KineticMarquee';
 import useExploreStore from '../stores/exploreStore';
@@ -8,7 +8,16 @@ import { locationService } from '../services/locationService';
 const tags = ['techno', 'goa', 'warehouse', 'hardgroove', 'afrohouse', 'afterhours', 'vinyl', 'festival'];
 
 export default function Explore() {
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const initialTag = searchParams.get('tag') || searchParams.get('q') || '';
+  const [query, setQuery] = useState(initialTag ? (initialTag.startsWith('#') ? initialTag : `#${initialTag}`) : '');
+
+  useEffect(() => {
+    const t = searchParams.get('tag') || searchParams.get('q');
+    if (t) {
+      setQuery(t.startsWith('#') ? t : `#${t}`);
+    }
+  }, [searchParams]);
   const { trending, suggested, searchResults, isLoading, fetchTrending, fetchSuggested, search } = useExploreStore();
   const [matchingVenues, setMatchingVenues] = useState([]);
   const [trendingVenues, setTrendingVenues] = useState([]);

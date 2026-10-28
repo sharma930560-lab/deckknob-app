@@ -25,12 +25,16 @@ const useFeedStore = create((set, get) => ({
       
       const newLastDoc = results.length > 0 ? results[results.length - 1].docSnapshot : null;
 
-      set((state) => ({
-        posts: [...state.posts, ...results],
-        lastDocSnapshot: newLastDoc,
-        hasMore: results.length === 6,
-        isLoading: false,
-      }));
+      set((state) => {
+        const existingIds = new Set(state.posts.map((p) => p.id));
+        const uniqueResults = results.filter((p) => p.id && !existingIds.has(p.id));
+        return {
+          posts: [...state.posts, ...uniqueResults],
+          lastDocSnapshot: newLastDoc,
+          hasMore: results.length === 6,
+          isLoading: false,
+        };
+      });
     } catch (err) {
       console.error('[feedStore] fetchPosts error:', err);
       set({ isLoading: false });

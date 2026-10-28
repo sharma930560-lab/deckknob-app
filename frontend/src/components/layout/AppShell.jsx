@@ -3,12 +3,16 @@ import { Link, Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import CreateSheet from './CreateSheet';
+import CameraModal from '../camera/CameraModal';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
 import useExploreStore from '../../stores/exploreStore';
 import useNotificationStore from '../../stores/notificationStore';
 
 export default function AppShell() {
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
+  const [cameraModalOpen, setCameraModalOpen] = useState(false);
+  const [cameraDefaultMode, setCameraDefaultMode] = useState('story');
+
   const { suggested, fetchSuggested } = useExploreStore();
   const { notifications, fetchNotifications } = useNotificationStore();
 
@@ -17,13 +21,31 @@ export default function AppShell() {
     try { fetchNotifications(); } catch {}
   }, []);
 
+  const handleOpenCamera = (mode = 'story') => {
+    setCameraDefaultMode(mode);
+    setCameraModalOpen(true);
+  };
+
   return (
     <div className="min-h-[100dvh] bg-[#09090B] text-[#FAFAFA]">
       <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between border-b border-white/[0.08] bg-[#09090B]/86 px-3 sm:px-4 backdrop-blur-xl lg:hidden">
         <Link to="/feed" className="text-lg sm:text-xl font-black tracking-[-0.08em]">DECKKNOB</Link>
-        <Link to="/events/today" className="dk-button h-10 px-3 text-[#DFE104]">
-          <IconsaxAnimated name="calendar" size={20} />
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => handleOpenCamera('story')}
+            className="dk-button h-10 px-2.5 text-zinc-300 hover:text-[#DFE104]"
+            aria-label="Open Camera"
+            title="Live Camera & Stories"
+          >
+            <IconsaxAnimated name="camera" size={20} />
+          </button>
+          <Link to="/messages" className="dk-button h-10 px-2.5 text-zinc-300 hover:text-[#DFE104]" aria-label="Messages">
+            <IconsaxAnimated name="message" size={20} />
+          </Link>
+          <Link to="/events" className="dk-button h-10 px-2.5 text-[#DFE104]" aria-label="Events">
+            <IconsaxAnimated name="calendar" size={20} />
+          </Link>
+        </div>
       </header>
 
       <div className="mx-auto flex max-w-[1500px]">
@@ -77,7 +99,16 @@ export default function AppShell() {
       </div>
 
       <BottomNav onCreateClick={() => setCreateSheetOpen(true)} />
-      <CreateSheet open={createSheetOpen} onClose={() => setCreateSheetOpen(false)} />
+      <CreateSheet
+        open={createSheetOpen}
+        onClose={() => setCreateSheetOpen(false)}
+        onOpenCamera={handleOpenCamera}
+      />
+      <CameraModal
+        open={cameraModalOpen}
+        onClose={() => setCameraModalOpen(false)}
+        defaultMode={cameraDefaultMode}
+      />
     </div>
   );
 }

@@ -17,33 +17,51 @@ service cloud.firestore {
     }
 
     // ── Users ─────────────────────────────────────────────
+    // Users can read any public profile.
+    // Only the owner can create their profile or delete it.
+    // Owner can update fields (cannot escalate role/privilege).
+    // Non-owners can ONLY update follower count when following/unfollowing.
     match /users/{uid} {
       allow read: if true;
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid) || isAuthenticated();
+      allow update: if isOwner(uid) && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isVerified'])
+      ) || (
+        isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount', 'updatedAt'])
+      );
       allow delete: if isOwner(uid);
     }
 
     // ── Usernames (lookup table) ───────────────────────────
+    // Anyone can read to check availability.
+    // Only authenticated user can reserve a username under their own UID.
+    // Only owner of the username can delete or reassign it.
     match /usernames/{username} {
       allow read: if true;
-      allow write: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
     // ── Posts ─────────────────────────────────────────────
+    // Anyone can read posts.
+    // Only authenticated user can create posts with authorId == request.auth.uid.
+    // Owner can edit caption/media or delete.
+    // Non-authors can only update likes_count and comments_count (via like/comment actions).
     match /posts/{postId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes_count', 'comments_count', 'updatedAt'])
+      );
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
 
       // Post comments subcollection
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isAuthenticated();
-        allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
-        allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       }
     }
 
@@ -51,36 +69,43 @@ service cloud.firestore {
     match /reels/{reelId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes_count', 'comments_count', 'viewsCount', 'updatedAt'])
+      );
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isAuthenticated();
-        allow update: if isAuthenticated() && resource.data.authorId == request.auth.uid;
-        allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+        allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       }
     }
 
     // ── Likes ─────────────────────────────────────────────
+    // Likes are documented with ID: ${targetId}_${userId}
     match /likes/{likeId} {
       allow read: if true;
-      allow write: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // ── Saved Posts / Bookmarks ───────────────────────────
+    // Private to the bookmarking user
     match /savedPosts/{saveId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // ── Stories & Story Features ───────────────────────────
     match /stories/{storyId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewers', 'updatedAt'])
+      );
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
@@ -91,7 +116,7 @@ service cloud.firestore {
 
     match /storyReplies/{replyId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
@@ -103,7 +128,7 @@ service cloud.firestore {
     }
 
     match /storyAnalytics/{storyId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && resource.data.authorId == request.auth.uid;
       allow write: if isAuthenticated();
     }
 
@@ -115,8 +140,11 @@ service cloud.firestore {
     // ── Events ────────────────────────────────────────────
     match /events/{eventId} {
       allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees', 'updatedAt'])
+      );
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
@@ -129,8 +157,8 @@ service cloud.firestore {
 
     match /followers/{userId}/userFollowers/{targetId} {
       allow read: if true;
-      allow write: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == targetId;
+      allow delete: if isAuthenticated() && request.auth.uid == targetId;
     }
 
     match /follows/{followId} {
@@ -145,28 +173,50 @@ service cloud.firestore {
         resource.data.targetUid == request.auth.uid ||
         resource.data.recipientId == request.auth.uid
       );
-      allow write: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        resource.data.targetUid == request.auth.uid ||
-        resource.data.recipientId == request.auth.uid
-      );
-      allow delete: if isAuthenticated() && (
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
         resource.data.targetUid == request.auth.uid ||
         resource.data.recipientId == request.auth.uid
       );
     }
 
+    // ── Helper for Block Checks ─────────────────────────────
+    function isBlockedBy(authorUid, targetUid) {
+      return exists(/databases/$(database)/documents/blocked/$(authorUid)/blockedUsers/$(targetUid));
+    }
+
+    function isBlockedEitherWay(uid1, uid2) {
+      return isBlockedBy(uid1, uid2) || isBlockedBy(uid2, uid1);
+    }
+
     // ── Chats & Messages ───────────────────────────────────
     match /chats/{chatId} {
       allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow create: if isAuthenticated() 
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.participants[0] is string
+        && request.resource.data.participants[1] is string
+        && !isBlockedEitherWay(request.resource.data.participants[0], request.resource.data.participants[1]);
+      allow update: if isAuthenticated() 
+        && request.auth.uid in resource.data.participants
+        && resource.data.participants.size() == 2
+        && resource.data.participants[0] is string
+        && resource.data.participants[1] is string
+        && !isBlockedEitherWay(resource.data.participants[0], resource.data.participants[1])
+        && request.resource.data.participants == resource.data.participants;
 
       match /messages/{messageId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
-        allow update: if isAuthenticated() && resource.data.senderId == request.auth.uid;
-        allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isAuthenticated() 
+          && request.resource.data.senderId == request.auth.uid 
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.size() == 2
+          && !isBlockedEitherWay(
+            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0],
+            get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]
+          );
+        allow update, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
       }
     }
 
@@ -196,5 +246,65 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAuthenticated();
     }
+
+    // ── Blocked Users ─────────────────────────────────────
+    // Only the blocking user can read/write their own block list.
+    // Blocked users cannot see they are blocked.
+    match /blocked/{userId}/blockedUsers/{targetId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ── DJ Calendars (Personal Calendar with Follow-Only Privacy) ───
+    function isFollowerOf(djUid) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/followers/$(djUid)/userFollowers/$(request.auth.uid));
+    }
+
+    match /djCalendars/{djUid} {
+      // Minimum secure read:
+      // 1. Owner can always read their own settings.
+      // 2. Non-owner can ONLY read if the calendar is explicitly NOT private:
+      //    - Public or Followers-only: authenticated users can inspect privacy tier (so UI can show follow prompt).
+      //    - Private calendar: STRICTLY DENIED to all non-owners. No metadata or update timestamps leaked.
+      // 3. Missing 'privacy' field defaults to 'private' (fail-closed).
+      allow read: if isOwner(djUid) || (
+        isAuthenticated() &&
+        'privacy' in resource.data &&
+        resource.data.privacy in ['followers', 'public']
+      );
+
+      // Writes (create, update, delete) are strictly restricted to the DJ calendar owner.
+      allow create: if isOwner(djUid) && (!('djUid' in request.resource.data) || request.resource.data.djUid == djUid);
+      allow update: if isOwner(djUid) && (!('djUid' in request.resource.data) || request.resource.data.djUid == djUid);
+      allow delete: if isOwner(djUid);
+
+      match /entries/{entryId} {
+        // Writes (create, update, delete) strictly restricted to the calendar owner.
+        allow create: if isOwner(djUid) && (!('djUid' in request.resource.data) || request.resource.data.djUid == djUid);
+        allow update: if isOwner(djUid);
+        allow delete: if isOwner(djUid);
+
+        // Read permissions:
+        // 1. Owner always has full read access (including confidential notes and private rehearsal slots).
+        // 2. Non-owners are strictly DENIED if:
+        //    - Unauthenticated (signed-out visitor)
+        //    - Calendar is private or missing privacy field (fail-closed)
+        //    - Entry is private or missing visibility field (fail-closed)
+        // 3. Non-owners are ALLOWED only if:
+        //    - Calendar is public AND entry visibility is public
+        //    - OR Calendar is followers/public AND entry is followers/public AND requester is verified follower
+        allow read: if isOwner(djUid) || (
+          isAuthenticated() &&
+          'visibility' in resource.data &&
+          resource.data.visibility in ['followers', 'public'] &&
+          'privacy' in get(/databases/$(database)/documents/djCalendars/$(djUid)).data && (
+            (get(/databases/$(database)/documents/djCalendars/$(djUid)).data.privacy == 'public' &&
+             resource.data.visibility == 'public') ||
+            (get(/databases/$(database)/documents/djCalendars/$(djUid)).data.privacy in ['followers', 'public'] &&
+             isFollowerOf(djUid))
+          )
+        );
+      }
+    }
   }
 }
+

@@ -155,3 +155,76 @@ a:hover .iconsax-animated {
 ::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #27272A; border-radius: 999px; }
+
+/* ── Smooth Animated Fire Reaction 🔥 ── */
+@keyframes flame-ignite {
+  0% { transform: scale(0.8) rotate(-8deg); filter: grayscale(80%) drop-shadow(0 0 0 rgba(255, 100, 0, 0)); }
+  45% { transform: scale(1.35) rotate(6deg); filter: grayscale(0%) drop-shadow(0 0 16px rgba(255, 120, 0, 1)); }
+  75% { transform: scale(1.05) rotate(-3deg); }
+  100% { transform: scale(1.1) rotate(0deg); }
+}
+
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1.1) rotate(0deg) translateY(0); filter: drop-shadow(0 0 8px rgba(255, 90, 0, 0.75)); }
+  25% { transform: scale(1.12, 1.08) rotate(-1.5deg) translateY(-0.5px); filter: drop-shadow(0 0 12px rgba(255, 130, 0, 0.9)); }
+  50% { transform: scale(1.09, 1.13) rotate(1.5deg) translateY(0.5px); filter: drop-shadow(0 0 10px rgba(255, 110, 0, 0.8)); }
+  75% { transform: scale(1.13, 1.09) rotate(-1deg) translateY(-0.5px); filter: drop-shadow(0 0 14px rgba(255, 150, 0, 0.85)); }
+}
+
+@keyframes spark-1 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(-14px, -20px) scale(0); opacity: 0; }
+}
+
+@keyframes spark-2 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(14px, -18px) scale(0); opacity: 0; }
+}
+
+@keyframes spark-3 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(-8px, -26px) scale(0); opacity: 0; }
+}
+
+@keyframes spark-4 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(10px, -24px) scale(0); opacity: 0; }
+}
+
+.dk-flame-ignite {
+  animation: flame-ignite 550ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.dk-flame-active {
+  animation: flame-flicker 2.8s ease-in-out infinite alternate;
+}
+
+.dk-spark {
+  position: absolute;
+  top: 40%;
+  left: 45%;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: #DFE104;
+  box-shadow: 0 0 6px #ff7700;
+  pointer-events: none;
+}
+
+.dk-spark-1 { animation: spark-1 600ms cubic-bezier(0.1, 0.9, 0.2, 1) forwards; }
+.dk-spark-2 { animation: spark-2 650ms cubic-bezier(0.1, 0.9, 0.2, 1) 40ms forwards; }
+.dk-spark-3 { animation: spark-3 700ms cubic-bezier(0.1, 0.9, 0.2, 1) 80ms forwards; }
+.dk-spark-4 { animation: spark-4 620ms cubic-bezier(0.1, 0.9, 0.2, 1) 60ms forwards; }
+
+/* Prefers reduced motion overrides */
+@media (prefers-reduced-motion: reduce) {
+  .dk-flame-ignite,
+  .dk-flame-active,
+  .dk-spark-1,
+  .dk-spark-2,
+  .dk-spark-3,
+  .dk-spark-4 {
+    animation: none !important;
+  }
+}
+

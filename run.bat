@@ -6,15 +6,23 @@ netstat -ano | findstr :8000 >nul && goto stop
 netstat -ano | findstr :5173 >nul && goto stop
 
 :start
-echo Starting Backend (Django)...
-if exist "venv\Scripts\activate.bat" (
-    start "DECKKNOB_BACKEND" /min cmd /c "call venv\Scripts\activate.bat && cd backend && python manage.py runserver 127.0.0.1:8000"
-) else (
-    start "DECKKNOB_BACKEND" /min cmd /c "cd backend && python manage.py runserver 127.0.0.1:8000"
-)
-
+echo ========================================================
+echo   DECKKNOB - 100%% Firebase Serverless (Free Tier)
+echo   Auth: Firebase Authentication
+echo   Database: Cloud Firestore
+echo   Storage: Firebase Storage
+echo ========================================================
 echo Starting Frontend (Vite)...
 start "DECKKNOB_FRONTEND" /min cmd /c "cd frontend && npm run dev"
+
+if "%1"=="--with-backend" (
+    echo Starting Optional Django Backend...
+    if exist "venv\Scripts\activate.bat" (
+        start "DECKKNOB_BACKEND" /min cmd /c "call venv\Scripts\activate.bat && cd backend && python manage.py runserver 127.0.0.1:8000"
+    ) else (
+        start "DECKKNOB_BACKEND" /min cmd /c "cd backend && python manage.py runserver 127.0.0.1:8000"
+    )
+)
 goto end
 
 :stop

@@ -41,7 +41,7 @@ export default function StoriesStrip() {
         <div className="flex gap-4">
           {groups.map((group, idx) => (
             <button
-              key={group.user?.id || group.user?.username}
+              key={group.user?.id || group.user?.username || `group-${idx}`}
               onClick={() => openStoryGroup(idx)}
               className="w-20 shrink-0 text-center"
             >

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import IconsaxAnimated from '../icons/IconsaxAnimated';
 import EmojiPicker from '../ui/EmojiPicker';
 import authStore from '../../stores/authStore';
 import { storyService } from '../../services/storyService';
+import { audioCoordinator } from '../../services/musicService';
 import { useToast } from '../ui/Toast';
 
 export default function StoryViewer({ activeGroup, onNextUser, onPrevUser, onClose, onStorySeen }) {
@@ -19,19 +21,23 @@ export default function StoryViewer({ activeGroup, onNextUser, onPrevUser, onClo
   const [floatingEmojis, setFloatingEmojis] = useState([]);
   const [showReplyEmoji, setShowReplyEmoji] = useState(false);
 
-  // Sound play state
+  // Sound play & autoplay restrictions state
   const [isPlayingSound, setIsPlayingSound] = useState(true);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const audioRef = useRef(null);
 
   const activeStory = activeGroup?.stories?.[segmentIndex];
   const isOwner = currentUser?.uid === activeGroup?.user?.id;
 
-  // Auto-advance & progress bar interval
+  // Auto-advance & progress bar interval synchronized with clip duration
   useEffect(() => {
     if (!activeStory || isPaused) return;
 
     setProgress(0);
-    const duration = activeStory.media_type === 'video' ? 10000 : 5000; // 10s for video, 5s for image
+    const musicClipDurationMs = activeStory.music?.duration
+      ? Math.max(5000, Number(activeStory.music.duration) * 1000)
+      : null;
+    const duration = musicClipDurationMs || (activeStory.media_type === 'video' ? 10000 : 5000);
     const intervalTime = 100;
     const increment = (intervalTime / duration) * 100;
 
@@ -65,21 +71,51 @@ export default function StoryViewer({ activeGroup, onNextUser, onPrevUser, onClo
     }
   }, [segmentIndex, activeStory, showInsights]);
 
-  // Audio trigger
+  // Synchronized audio playback with singleton audioCoordinator
   useEffect(() => {
-    if (audioRef.current) {
-      if (isPlayingSound && activeStory?.music) {
-        audioRef.current.volume = 0.8;
-        audioRef.current.currentTime = activeStory.music.startTime || 0;
-        audioRef.current.play().catch(() => {});
-      } else {
-        audioRef.current.pause();
-      }
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!activeStory?.music || !isPlayingSound || isPaused) {
+      audio.pause();
+      return;
     }
+
+    const musicUrl = activeStory.music.audioUrl || activeStory.music.previewUrl;
+    if (!musicUrl) return;
+
+    if (audio.src !== musicUrl) {
+      audio.src = musicUrl;
+    }
+
+    const startPos = Number(activeStory.music.startTime) || 0;
+    audio.currentTime = startPos;
+    audio.volume = 0.85;
+
+    const sessionId = `story_${activeStory.id || segmentIndex}`;
+    audioCoordinator.startSession(sessionId, 'story', () => {
+      setIsPlayingSound(false);
+      if (audio) audio.pause();
+    });
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setAutoplayBlocked(false);
+        })
+        .catch((err) => {
+          console.warn('[StoryViewer] Autoplay blocked by browser policy:', err);
+          setAutoplayBlocked(true);
+          setIsPlayingSound(false);
+        });
+    }
+
     return () => {
-      if (audioRef.current) audioRef.current.pause();
+      if (audio) audio.pause();
+      audioCoordinator.stopSession(sessionId);
     };
-  }, [segmentIndex, activeStory, isPlayingSound]);
+  }, [segmentIndex, activeStory, isPlayingSound, isPaused]);
 
   if (!activeStory) return null;
 
@@ -213,13 +249,39 @@ export default function StoryViewer({ activeGroup, onNextUser, onPrevUser, onClo
 
             {/* Close button */}
             <button
-              onClick={onClose}
+              onClick={() => {
+                audioCoordinator.stopAll();
+                onClose();
+              }}
               className="h-8 w-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"
             >
               <IconsaxAnimated name="close" size={16} />
             </button>
           </div>
         </div>
+
+        {/* Hidden Audio Element for Story Music */}
+        <audio ref={audioRef} playsInline preload="auto" />
+
+        {/* Tap to Unmute / Autoplay Blocked Prompt */}
+        {autoplayBlocked && activeStory.music && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setAutoplayBlocked(false);
+              setIsPlayingSound(true);
+              if (audioRef.current) {
+                audioRef.current.currentTime = Number(activeStory.music.startTime) || 0;
+                audioRef.current.play().catch(() => {});
+              }
+            }}
+            className="absolute top-24 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-black/85 px-4 py-2 text-xs font-bold text-white border border-[#DFE104] shadow-[0_0_20px_rgba(223,225,4,0.35)] animate-pulse"
+          >
+            <span className="text-sm">🔊</span>
+            <span>Tap to enable story sound</span>
+          </button>
+        )}
 
         {/* Media elements */}
         {activeStory.media_type === 'video' ? (
@@ -253,28 +315,58 @@ export default function StoryViewer({ activeGroup, onNextUser, onPrevUser, onClo
           </div>
         )}
 
-        {/* Floating overlays (rendered statically exactly where added) */}
-        {(activeStory.overlays || []).map((overlay) => (
-          <div
-            key={overlay.id}
-            className="absolute z-20 pointer-events-none"
-            style={{
-              left: `${overlay.x}px`,
-              top: `${overlay.y}px`,
-              transform: `rotate(${overlay.rotation || 0}deg)`,
-              fontSize: `${overlay.size || 20}px`,
-              color: overlay.color || '#fff'
-            }}
-          >
-            {overlay.type === 'text' ? (
-              <span className={overlay.font?.class}>{overlay.text}</span>
-            ) : (
-              <div className="bg-[#DFE104] text-black px-4 py-2 rounded-2xl font-black uppercase text-[10px] tracking-wider">
-                {overlay.text}
-              </div>
-            )}
-          </div>
-        ))}
+        {/* Floating overlays (rendered statically or interactively) */}
+        {(activeStory.overlays || []).map((overlay) => {
+          const isMention = overlay.type === 'mention' || (typeof overlay.text === 'string' && overlay.text.startsWith('@'));
+          const mentionUsername = (overlay.username || (typeof overlay.text === 'string' ? overlay.text.replace(/^@/, '') : '')).trim();
+
+          return (
+            <div
+              key={overlay.id}
+              className={`absolute z-20 ${isMention ? 'pointer-events-auto' : 'pointer-events-none'}`}
+              style={{
+                left: `${overlay.x}px`,
+                top: `${overlay.y}px`,
+                transform: `rotate(${overlay.rotation || 0}deg)`,
+                fontSize: `${overlay.size || 20}px`,
+                color: overlay.color || '#fff'
+              }}
+            >
+              {isMention ? (
+                <Link
+                  to={`/profile/${mentionUsername}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onClose) onClose();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-[#DFE104] text-[#DFE104] font-black text-xs uppercase tracking-wider shadow-[0_4px_20px_rgba(223,225,4,0.3)] hover:bg-[#DFE104] hover:text-black transition-all active:scale-95 cursor-pointer"
+                  title={`View @${mentionUsername}'s profile`}
+                >
+                  <span className="text-[11px] opacity-75">@</span>
+                  <span>{mentionUsername}</span>
+                </Link>
+              ) : overlay.type === 'music' ? (
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-[#DFE104] text-white shadow-[0_4px_20px_rgba(223,225,4,0.3)]">
+                  <span className="flex items-center gap-0.5 text-[#DFE104]">
+                    <span className="h-2 w-0.5 bg-[#DFE104] animate-pulse" />
+                    <span className="h-3.5 w-0.5 bg-[#DFE104] animate-pulse delay-75" />
+                    <span className="h-2 w-0.5 bg-[#DFE104] animate-pulse delay-150" />
+                  </span>
+                  <div className="min-w-0 pr-1 text-left">
+                    <p className="text-xs font-bold leading-tight truncate text-white max-w-[130px]">{overlay.title || 'Soundtrack'}</p>
+                    <p className="text-[10px] text-zinc-400 leading-tight truncate max-w-[130px]">{overlay.artist || 'Curated'}</p>
+                  </div>
+                </div>
+              ) : overlay.type === 'text' ? (
+                <span className={overlay.font?.class}>{overlay.text}</span>
+              ) : (
+                <div className="bg-[#DFE104] text-black px-4 py-2 rounded-2xl font-black uppercase text-[10px] tracking-wider">
+                  {overlay.text}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* Floating Emoji animations */}
         <AnimatePresence>
