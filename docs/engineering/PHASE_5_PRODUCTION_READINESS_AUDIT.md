@@ -33,7 +33,7 @@ The Phase 5 Security Verification Gate and v1.0.2 release preparation were execu
 | **SEC-03** | ProGuard Rules | `clean assembleRelease` (21.62 MB APK), `apksigner verify`, and live runtime installation on `emulator-5554` | Clean launch, zero crashes | **PASS** |
 | **SEC-02** | Cloudinary Security | Architectural threat analysis documented with console-level hardening recommendations | Console configuration ready | **DOCUMENTED** |
 | **SEC-04** | Secrets Scanning | Repository-wide regex audit for private keys, AWS/GCP service accounts, and hardcoded secrets | 0 Exposed Secrets | **PASS** |
-| **GOV-01** | Version Governance | Verified `versionCode = 2`, `versionName = "1.0.1"` preserved in `build.gradle.kts` | Intact baseline | **PASS** |
+| **GOV-01** | Version Governance | Bumped to `versionCode = 3`, `versionName = "1.0.2"` in `build.gradle.kts` | Verified in APK | **PASS** |
 | **REG-01** | Unit Regression | `.\gradlew.bat testDebugUnitTest` across 9 test suites | 67 Passed, 0 Failed | **PASS** |
 | **REG-02** | Frontend Build | `npm run build` in `frontend/` (Vite v8.0.10) | 579 modules built | **PASS** |
 
@@ -136,7 +136,7 @@ SHA-1 Digest: 1c1e5cc7998d1b55fc3932b1540d8330ebdfef1b (Matches google-services.
 - No user data or database state was wiped.
 - Launched `com.deckknob.app/.MainActivity`:
   - **Feed UI Rendering:** Rendered complete Compose hierarchy (`LIVE FROM THE UNDERGROUND`, stories row, category chips, tonight's gigs cards, bottom navigation bar).
-  - **Navigation & Firestore Deserialization:** Navigated to Profile (`@jojo`, UID: `8mMy0KICHhOrM5aQ2uITtMaHu452`); verified user profile document deserialized properly with follower/following stats and DJ genre tags.
+  - **Navigation & Firestore Deserialization:** Navigated to Profile; verified authenticated test user profile document deserialized properly with follower/following stats and DJ genre tags.
   - **Image & Resource Loading:** Coil image loader initialized cleanly without missing class exceptions.
   - **Logcat Audit:** Zero crashes, zero `ClassNotFoundException`, zero Hilt injector failures.
 
@@ -203,9 +203,9 @@ Following local v1.0.2 artifact generation, a full end-to-end runtime smoke test
 | :--- | :--- | :---: | :--- |
 | **Artifact Integrity** | SHA-256 recalculation, `aapt2 dump badging`, `apksigner` | **PASS** | `DB6852FB2EA2871F187231A860F00EDD2E6FB8FBBAF551C43D1FBA9541BC2872`. Version: `1.0.2 (versionCode 3)`. Signature: Scheme v2 verified. |
 | **Streamed Update** | `adb install -r deckknob-v1.0.2.apk` | **PASS** | `Success`. Updated `versionCode=2 -> 3`, `versionName=1.0.1 -> 1.0.2`. Signatures match existing key (`PackageSignatures{82e9956 version:2, signatures:[e134c11b]}`). |
-| **Launch & Session** | `am start -n com.deckknob.app/.MainActivity` | **PASS** | Resumed immediately with zero crashes. Auth session restored for `@jojo` (UID: `8mMy0KICHhOrM5aQ2uITtMaHu452`). |
+| **Launch & Session** | `am start -n com.deckknob.app/.MainActivity` | **PASS** | Resumed immediately with zero crashes. Authenticated session restored for test user. |
 | **Feed Screen** | UI hierarchy verification | **PASS** | "LIVE FROM THE UNDERGROUND", category chips (TECHNO, HOUSE, AFRO HOUSE), "TONIGHT'S GIGS", and live posts rendered cleanly. |
-| **Profile Screen** | Navigation to Profile tab | **PASS** | User profile loaded (`Paras Sharma`, `@jojo`, FAN, stats, and profile image rendered via Coil). |
+| **Profile Screen** | Navigation to Profile tab | **PASS** | User profile loaded (test profile name, handle, role, stats, and profile image rendered via Coil). |
 | **Comments Loading** | Tap Comment button on feed post | **PASS** | `COMMENTS (1)` sheet opened; loaded comment `@test_b_751141: "Massive track selection! When is the next set?"` from Firestore. |
 | **Saved Vault** | Tap Save button on post and Klyp | **PASS** | Save and unsave toggle buttons responsive; Saved tab and DJ calendar views active. |
 | **Cloudinary Audio Demo** | Tap Play on Acid Sunrise in DJ Demos | **PASS** | MediaHTTPService fetched stream; MediaPlayer initialized; audio output routed to device audio track (`MediaPlayerService: onAudioDeviceUpdate deviceIds: 2`). Pause/resume verified. |
@@ -215,14 +215,15 @@ Following local v1.0.2 artifact generation, a full end-to-end runtime smoke test
 
 ---
 
-## 9. CONCLUSION & FINAL DEPLOYMENT READINESS
+## 9. CONCLUSION & FINAL DEPLOYMENT STATUS
 
 The DECKKNOB v1.0.2 Release Candidate has passed all static, security, unit, build, and live runtime smoke tests. The artifact is validated and archived locally:
 - **Path:** `android/release-artifacts/v1.0.2/deckknob-v1.0.2.apk`
 - **SHA-256:** `DB6852FB2EA2871F187231A860F00EDD2E6FB8FBBAF551C43D1FBA9541BC2872`
 - **Integrity:** Byte-identical before and after smoke testing.
 
-The project remains strictly within the defined boundary:
-- No remote Git operations.
-- No production database or rules deployment.
-- Ready for final publication upon user authorization.
+### Current Deployment & Governance Status:
+1. **GitHub Release:** Tag `v1.0.2` is published at commit `544ea28` with verified APK attached.
+2. **Prior Release:** Release `v1.0.1` and asset `deckknob-v1.0.1.apk` remain active and unmodified.
+3. **Firestore Production Rules:** Hardened security rules are committed in source (`frontend/firestore.rules`) and verified on local emulator; they have **NOT** been deployed to production Firebase.
+4. **Firebase Storage:** Remains BLOCKED pending Blaze billing activation. Cloudinary remains the active media upload provider.

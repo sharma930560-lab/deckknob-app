@@ -69,9 +69,13 @@ DECKKNOB v1.0.2 is a security hardening, reliability, and production-governance 
 
 ---
 
-## 5. Known Limitations & Strict Boundaries
+## 5. Release Governance & Infrastructure Status
 
-1. **Firebase Storage:** Firebase Storage audio upload remains BLOCKED pending Blaze billing activation. Cloudinary remains the active media upload provider.
-2. **Firestore Rules Deployment:** `frontend/firestore.rules` changes are maintained locally and have NOT been deployed to the live production Firestore database pending administrative deployment approval.
-3. **Repository State:** No Git commits, tags, or pushes have been executed. All release artifacts and code updates reside locally on the workstation.
+1. **GitHub Release Publication:** Tag `v1.0.2` created and published on GitHub (`sharma930560-lab/deckknob-app`) with target commit `544ea28`.
+2. **Release Artifact Attached:** `deckknob-v1.0.2.apk` (22,670,280 bytes, SHA-256: `DB6852FB2EA2871F187231A860F00EDD2E6FB8FBBAF551C43D1FBA9541BC2872`).
+3. **Prior Release Preserved:** Release `v1.0.1` and asset `deckknob-v1.0.1.apk` remain active and unmodified.
+4. **Firebase Storage:** Firebase Storage audio upload remains BLOCKED pending Blaze billing activation. Cloudinary remains the active media upload provider.
+5. **Firestore Rules Deployment:** `frontend/firestore.rules` changes are maintained in source control and verified on the local emulator; they have NOT been deployed to the live production Firestore database.
+6. **Physical Hardware:** Verification was conducted on `emulator-5554` (API 36). Physical hardware testing was not performed.
+7. **FCM Push Notifications:** Cross-device push delivery remains unverified due to headless emulator GMS authentication limitations.
 
