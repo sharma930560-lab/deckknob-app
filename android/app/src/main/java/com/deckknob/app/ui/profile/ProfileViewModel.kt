@@ -22,6 +22,7 @@ import com.deckknob.app.data.model.UserDto
 import com.deckknob.app.data.repository.AuthRepository
 import com.deckknob.app.data.repository.PostRepository
 import com.deckknob.app.data.repository.ReelRepository
+import com.deckknob.app.data.repository.SocialRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -33,7 +34,8 @@ class ProfileViewModel @Inject constructor(
     private val postRepository: PostRepository,
     private val reelRepository: ReelRepository,
     private val storageRepository: StorageRepository,
-    private val djCalendarRepository: DJCalendarRepository
+    private val djCalendarRepository: DJCalendarRepository,
+    private val socialRepository: SocialRepository
 ) : ViewModel() {
 
     var currentUser by mutableStateOf<UserDto?>(null)
@@ -72,8 +74,28 @@ class ProfileViewModel @Inject constructor(
     var newDemoBpm by mutableStateOf("")
     var newDemoKey by mutableStateOf("")
     var newDemoAudioUri by mutableStateOf<Uri?>(null)
+    var newDemoFileName by mutableStateOf("")
+    var newDemoFileSizeMb by mutableStateOf("")
     var isUploadingDemo by mutableStateOf(false)
     var activePlayingTrackUrl by mutableStateOf<String?>(null)
+
+    // Follow List Sheet State (Feature C)
+    var showFollowListSheet by mutableStateOf(false)
+    var followListTitle by mutableStateOf("Followers")
+    var followListUsers by mutableStateOf<List<UserDto>>(emptyList())
+    var isLoadingFollowList by mutableStateOf(false)
+    var followListError by mutableStateOf<String?>(null)
+    val followListFollowingMap = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    var activeViewerUid by mutableStateOf<String?>(null)
+
+    // Saved Vault State (Tab 2)
+    var savedPosts by mutableStateOf<List<PostDto>>(emptyList())
+    var savedKlyps by mutableStateOf<List<ReelDto>>(emptyList())
+    var isLoadingSaved by mutableStateOf(false)
+
+    // Avatar Cropping State (Bug 01)
+    var rawPickedAvatarUri by mutableStateOf<Uri?>(null)
+    var showAvatarCropDialog by mutableStateOf(false)
 
     var showEditProfileDialog by mutableStateOf(false)
     var showAvatarViewer by mutableStateOf(false)
@@ -94,6 +116,21 @@ class ProfileViewModel @Inject constructor(
 
     init {
         loadProfile()
+        observeSocialSync()
+    }
+
+    private fun observeSocialSync() {
+        viewModelScope.launch {
+            socialRepository.followingState.collect { stateMap ->
+                val target = currentUser?.uid
+                if (target != null && stateMap.containsKey(target) && isOtherUser) {
+                    isFollowingUser = stateMap[target] ?: false
+                }
+                stateMap.forEach { (uid, isFollowing) ->
+                    followListFollowingMap[uid] = isFollowing
+                }
+            }
+        }
     }
 
     fun loadProfile() {
@@ -105,6 +142,7 @@ class ProfileViewModel @Inject constructor(
             isLoading = true
             error = null
             val activeUid = authRepository.activeUserId.firstOrNull() ?: authRepository.currentFirebaseUser?.uid
+            activeViewerUid = activeUid
             val uidToLoad = if (!targetUid.isNullOrBlank()) targetUid else activeUid
             isOtherUser = !targetUid.isNullOrBlank() && targetUid != activeUid
 
@@ -119,6 +157,9 @@ class ProfileViewModel @Inject constructor(
                 postRepository.getUserPosts(uidToLoad).onSuccess { userPosts = it }
                 reelRepository.getUserReels(uidToLoad).onSuccess { userKlyps = it }
                 loadCalendar(uidToLoad)
+                if (!isOtherUser) {
+                    loadSavedVault()
+                }
 
                 if (isOtherUser && activeUid != null) {
                     isFollowingUser = djCalendarRepository.isFollowing(activeUid, uidToLoad)
@@ -135,28 +176,95 @@ class ProfileViewModel @Inject constructor(
             if (targetUid == activeUid) return@launch
 
             val wasFollowing = isFollowingUser
-            isFollowingUser = !wasFollowing
-            try {
-                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val followingRef = firestore.collection("following")
-                    .document(activeUid)
-                    .collection("userFollowing")
-                    .document(targetUid)
-                val followerRef = firestore.collection("followers")
-                    .document(targetUid)
-                    .collection("userFollowers")
-                    .document(activeUid)
+            val previousFollowersCount = currentUser?.followersCount ?: 0
 
-                if (!wasFollowing) {
-                    followingRef.set(mapOf("followedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())).await()
-                    followerRef.set(mapOf("followerId" to activeUid)).await()
-                } else {
-                    followingRef.delete().await()
-                    followerRef.delete().await()
+            // Optimistic update
+            isFollowingUser = !wasFollowing
+            val newCount = if (!wasFollowing) previousFollowersCount + 1 else (previousFollowersCount - 1).coerceAtLeast(0)
+            currentUser = currentUser?.copy(followersCount = newCount)
+
+            val result = if (!wasFollowing) {
+                val currentProfile = authRepository.fetchUserProfile(activeUid)
+                socialRepository.followUser(activeUid, targetUid, currentProfile)
+            } else {
+                socialRepository.unfollowUser(activeUid, targetUid)
+            }
+
+            result.fold(
+                onSuccess = {
+                    loadCalendar(targetUid)
+                },
+                onFailure = {
+                    // Revert optimistic updates
+                    isFollowingUser = wasFollowing
+                    currentUser = currentUser?.copy(followersCount = previousFollowersCount)
+                    error = "Failed to update follow status"
                 }
-                loadCalendar(targetUid)
-            } catch (e: Exception) {
-                isFollowingUser = wasFollowing
+            )
+        }
+    }
+
+    fun openFollowersList() {
+        val targetUid = currentUser?.uid ?: return
+        followListTitle = "Followers"
+        showFollowListSheet = true
+        loadFollowList(targetUid, isFollowers = true)
+    }
+
+    fun openFollowingList() {
+        val targetUid = currentUser?.uid ?: return
+        followListTitle = "Following"
+        showFollowListSheet = true
+        loadFollowList(targetUid, isFollowers = false)
+    }
+
+    private fun loadFollowList(targetUid: String, isFollowers: Boolean) {
+        viewModelScope.launch {
+            isLoadingFollowList = true
+            followListError = null
+            val result = if (isFollowers) {
+                socialRepository.getFollowers(targetUid)
+            } else {
+                socialRepository.getFollowing(targetUid)
+            }
+
+            result.fold(
+                onSuccess = { users ->
+                    followListUsers = users
+                    isLoadingFollowList = false
+                    val viewer = activeViewerUid
+                    if (viewer != null) {
+                        for (u in users) {
+                            val isF = socialRepository.isFollowing(viewer, u.uid)
+                            followListFollowingMap[u.uid] = isF
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    followListError = "Unable to load users."
+                    isLoadingFollowList = false
+                }
+            )
+        }
+    }
+
+    fun toggleFollowInSheet(targetUser: UserDto) {
+        val viewer = activeViewerUid ?: return
+        val targetUid = targetUser.uid
+        if (targetUid.isBlank() || targetUid == viewer) return
+
+        val isCurrentlyFollowing = followListFollowingMap[targetUid] ?: false
+        followListFollowingMap[targetUid] = !isCurrentlyFollowing
+
+        viewModelScope.launch {
+            val res = if (isCurrentlyFollowing) {
+                socialRepository.unfollowUser(viewer, targetUid)
+            } else {
+                val currentProfile = authRepository.fetchUserProfile(viewer)
+                socialRepository.followUser(viewer, targetUid, currentProfile)
+            }
+            res.onFailure {
+                followListFollowingMap[targetUid] = isCurrentlyFollowing
             }
         }
     }
@@ -210,10 +318,94 @@ class ProfileViewModel @Inject constructor(
             isSaving = false
         }
     }
+    fun setAudioDemoUri(uri: Uri?) {
+        newDemoAudioUri = uri
+        if (uri != null) {
+            val fileInfo = storageRepository.getMediaFileInfo(uri, isAudioHint = true)
+            newDemoFileName = fileInfo.displayName
+            val sizeMb = if (fileInfo.sizeBytes > 0) String.format(java.util.Locale.US, "%.1f MB", fileInfo.sizeBytes.toDouble() / (1024 * 1024)) else ""
+            newDemoFileSizeMb = sizeMb
+
+            if (fileInfo.sizeBytes > StorageRepository.MAX_AUDIO_SIZE_BYTES) {
+                error = "Audio file exceeds 25MB limit ($sizeMb)"
+            }
+
+            if (newDemoTitle.isBlank()) {
+                val cleaned = fileInfo.displayName.substringBeforeLast('.')
+                if (cleaned.isNotBlank()) newDemoTitle = cleaned
+            }
+        } else {
+            newDemoFileName = ""
+            newDemoFileSizeMb = ""
+        }
+    }
+
+    fun loadSavedVault() {
+        viewModelScope.launch {
+            isLoadingSaved = true
+            try {
+                val uid = authRepository.activeUserId.firstOrNull() ?: authRepository.currentFirebaseUser?.uid
+                if (uid.isNullOrBlank()) {
+                    savedPosts = emptyList()
+                    savedKlyps = emptyList()
+                    isLoadingSaved = false
+                    return@launch
+                }
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val snap = firestore.collection("savedPosts")
+                    .whereEqualTo("userId", uid)
+                    .get()
+                    .await()
+
+                val savedPostIds = snap.documents.mapNotNull { it.getString("postId") }
+                if (savedPostIds.isNotEmpty()) {
+                    val foundPosts = mutableListOf<PostDto>()
+                    val foundReels = mutableListOf<ReelDto>()
+
+                    for (id in savedPostIds) {
+                        try {
+                            val postDoc = firestore.collection("posts").document(id).get().await()
+                            if (postDoc.exists()) {
+                                postDoc.toObject(PostDto::class.java)?.copy(id = postDoc.id)?.let { p ->
+                                    p.isBookmarked = true
+                                    foundPosts.add(p)
+                                }
+                            } else {
+                                val reelDoc = firestore.collection("reels").document(id).get().await()
+                                if (reelDoc.exists()) {
+                                    reelDoc.toObject(ReelDto::class.java)?.copy(id = reelDoc.id)?.let { r ->
+                                        r.isBookmarked = true
+                                        foundReels.add(r)
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    savedPosts = foundPosts
+                    savedKlyps = foundReels
+                } else {
+                    savedPosts = emptyList()
+                    savedKlyps = emptyList()
+                }
+            } catch (e: Exception) {
+                com.deckknob.app.util.DeckKnobLogger.w(com.deckknob.app.util.DeckKnobLogger.Tag.FIRESTORE, "loadSavedVault error: ${e.message}")
+            } finally {
+                isLoadingSaved = false
+            }
+        }
+    }
+
     fun uploadDemoTrack() {
         val uri = newDemoAudioUri ?: return
         if (newDemoTitle.isBlank()) return
         val uid = authRepository.currentFirebaseUser?.uid ?: return
+
+        val fileInfo = storageRepository.getMediaFileInfo(uri, isAudioHint = true)
+        if (fileInfo.sizeBytes > StorageRepository.MAX_AUDIO_SIZE_BYTES) {
+            val sizeMb = String.format(java.util.Locale.US, "%.1f MB", fileInfo.sizeBytes.toDouble() / (1024 * 1024))
+            error = "Cannot upload: audio file ($sizeMb) exceeds 25MB limit"
+            return
+        }
 
         viewModelScope.launch {
             isUploadingDemo = true
@@ -256,6 +448,8 @@ class ProfileViewModel @Inject constructor(
                     newDemoBpm = ""
                     newDemoKey = ""
                     newDemoAudioUri = null
+                    newDemoFileName = ""
+                    newDemoFileSizeMb = ""
                     successMessage = "Demo track published to DJ Sets!"
                 } else {
                     error = updateRes.exceptionOrNull()?.message ?: "Could not save demo playlist"

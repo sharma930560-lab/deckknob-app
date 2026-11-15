@@ -10,8 +10,10 @@ import com.deckknob.app.data.model.EventDto
 import com.deckknob.app.data.model.NotificationDto
 import com.deckknob.app.data.model.PostDto
 import com.deckknob.app.data.model.UserDto
+import com.deckknob.app.data.repository.AuthRepository
 import com.deckknob.app.data.repository.EventRepository
 import com.deckknob.app.data.repository.PostRepository
+import com.deckknob.app.data.repository.SocialRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -27,7 +29,9 @@ class FeedViewModel @Inject constructor(
     private val postRepository: PostRepository,
     private val eventRepository: EventRepository,
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val socialRepository: SocialRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     var posts by mutableStateOf<List<PostDto>>(emptyList())
@@ -58,11 +62,31 @@ class FeedViewModel @Inject constructor(
     var showMusicPicker by mutableStateOf(false)
     var isPosting by mutableStateOf(false)
 
+    // Comments State for Feed Posts
+    var activeCommentPostId by mutableStateOf<String?>(null)
+    var comments by mutableStateOf<List<com.deckknob.app.data.model.ReelCommentDto>>(emptyList())
+    var isLoadingComments by mutableStateOf(false)
+    var isSubmittingComment by mutableStateOf(false)
+    var newCommentText by mutableStateOf("")
+
     init {
         loadFeed()
         loadUpcomingEvents()
         loadSceneRadar()
         loadNotifications()
+        observeSocialSync()
+    }
+
+    private fun observeSocialSync() {
+        viewModelScope.launch {
+            socialRepository.followingState.collect { stateMap ->
+                val current = followedDjs.toMutableSet()
+                stateMap.forEach { (targetUid, isFollowing) ->
+                    if (isFollowing) current.add(targetUid) else current.remove(targetUid)
+                }
+                followedDjs = current
+            }
+        }
     }
 
     val filteredPosts: List<PostDto>
@@ -109,14 +133,12 @@ class FeedViewModel @Inject constructor(
                 }
                 sceneRadarDjs = djs
 
-                // Check existing following
+                // Load existing following via SocialRepository for unified state
                 if (currentUid.isNotBlank()) {
-                    val followingSnap = firestore.collection("following")
-                        .document(currentUid)
-                        .collection("userFollowing")
-                        .get()
-                        .await()
-                    followedDjs = followingSnap.documents.map { it.id }.toSet()
+                    val followingRes = socialRepository.getFollowing(currentUid)
+                    val followingUids = followingRes.getOrDefault(emptyList()).map { it.uid }.toSet()
+                    followedDjs = followingUids
+                    socialRepository.seedFollowingState(followingUids)
                 }
             } catch (e: Exception) {
                 // non-critical discovery failure
@@ -149,33 +171,24 @@ class FeedViewModel @Inject constructor(
 
     fun toggleFollowDj(djUid: String) {
         val currentUid = auth.currentUser?.uid ?: return
-        if (djUid == currentUid) return
+        if (djUid.isBlank() || djUid == currentUid) return
 
         val isNowFollowed = !followedDjs.contains(djUid)
+        // Optimistic UI update
         followedDjs = if (isNowFollowed) followedDjs + djUid else followedDjs - djUid
 
         viewModelScope.launch {
-            try {
-                val followingRef = firestore.collection("following")
-                    .document(currentUid)
-                    .collection("userFollowing")
-                    .document(djUid)
+            val result = if (isNowFollowed) {
+                val currentUserProfile = authRepository.fetchUserProfile(currentUid)
+                socialRepository.followUser(currentUid, djUid, currentUserProfile)
+            } else {
+                socialRepository.unfollowUser(currentUid, djUid)
+            }
 
-                val followerRef = firestore.collection("followers")
-                    .document(djUid)
-                    .collection("userFollowers")
-                    .document(currentUid)
-
-                if (isNowFollowed) {
-                    followingRef.set(mapOf("followedAt" to FieldValue.serverTimestamp())).await()
-                    followerRef.set(mapOf("followerId" to currentUid)).await()
-                } else {
-                    followingRef.delete().await()
-                    followerRef.delete().await()
-                }
-            } catch (e: Exception) {
+            result.onFailure {
                 // Revert on failure
                 followedDjs = if (isNowFollowed) followedDjs - djUid else followedDjs + djUid
+                error = "Could not update relationship. Please try again."
             }
         }
     }
@@ -203,6 +216,66 @@ class FeedViewModel @Inject constructor(
                 }
                 error = res.exceptionOrNull()?.message ?: "Could not update reaction"
             }
+        }
+    }
+
+    fun toggleBookmark(post: PostDto) {
+        val postId = post.id
+        if (postId.isEmpty()) return
+        val currentlyBookmarked = post.isBookmarked
+        val newBookmarked = !currentlyBookmarked
+
+        posts = posts.map {
+            if (it.id == postId) {
+                it.copy().apply { isBookmarked = newBookmarked; isLiked = it.isLiked }
+            } else it
+        }
+
+        viewModelScope.launch {
+            val res = postRepository.bookmarkPost(postId, newBookmarked)
+            if (res.isFailure) {
+                posts = posts.map {
+                    if (it.id == postId) {
+                        it.copy().apply { isBookmarked = currentlyBookmarked; isLiked = it.isLiked }
+                    } else it
+                }
+                error = res.exceptionOrNull()?.message ?: "Could not update bookmark"
+            }
+        }
+    }
+
+    fun openComments(postId: String) {
+        activeCommentPostId = postId
+        newCommentText = ""
+        viewModelScope.launch {
+            isLoadingComments = true
+            val res = postRepository.getComments(postId)
+            res.onSuccess { comments = it }
+            res.onFailure { error = it.message }
+            isLoadingComments = false
+        }
+    }
+
+    fun closeComments() {
+        activeCommentPostId = null
+        comments = emptyList()
+        newCommentText = ""
+    }
+
+    fun addComment(postId: String, text: String) {
+        if (text.trim().isEmpty() || isSubmittingComment) return
+        viewModelScope.launch {
+            isSubmittingComment = true
+            val res = postRepository.addComment(postId, text)
+            res.onSuccess { newComment ->
+                comments = comments + newComment
+                newCommentText = ""
+                posts = posts.map {
+                    if (it.id == postId) it.copy(commentsCount = it.commentsCount + 1).apply { isLiked = it.isLiked; isBookmarked = it.isBookmarked } else it
+                }
+            }
+            res.onFailure { error = it.message }
+            isSubmittingComment = false
         }
     }
 

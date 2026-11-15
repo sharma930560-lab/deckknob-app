@@ -2,6 +2,7 @@ package com.deckknob.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,7 +29,8 @@ import com.deckknob.app.ui.theme.DeckKnobYellow
 fun NotificationHubSheet(
     notifications: List<NotificationDto>,
     isLoading: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onNotificationClick: ((NotificationDto) -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -74,17 +76,22 @@ fun NotificationHubSheet(
 
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.06f))
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
@@ -146,11 +153,13 @@ fun NotificationHubSheet(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(notifications) { item ->
-                        val iconVector = when (item.notification_type) {
-                            "like", "fire" -> Icons.Default.Whatshot
-                            "follow" -> Icons.Default.PersonAdd
-                            "event" -> Icons.Default.DateRange
+                    items(notifications, key = { it.id }) { item ->
+                        val notifType = item.displayType.lowercase()
+                        val iconVector = when {
+                            notifType.contains("like") || notifType.contains("fire") -> Icons.Default.Whatshot
+                            notifType.contains("follow") -> Icons.Default.PersonAdd
+                            notifType.contains("event") -> Icons.Default.DateRange
+                            notifType.contains("comment") -> Icons.Default.ChatBubble
                             else -> Icons.Default.Notifications
                         }
 
@@ -160,6 +169,9 @@ fun NotificationHubSheet(
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(if (item.is_read) Color.White.copy(alpha = 0.02f) else Color.White.copy(alpha = 0.06f))
                                 .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+                                .clickable {
+                                    onNotificationClick?.invoke(item)
+                                }
                                 .padding(14.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -189,7 +201,7 @@ fun NotificationHubSheet(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Live signal alert",
+                                        text = if (item.displaySender.isNotBlank()) "From @${item.displaySender}" else "Live signal alert",
                                         fontSize = 10.sp,
                                         color = Color.Gray
                                     )

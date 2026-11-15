@@ -3,6 +3,7 @@ package com.deckknob.app.data.repository
 import com.deckknob.app.data.model.ChatDto
 import com.deckknob.app.data.model.ChatMessageDto
 import com.deckknob.app.data.model.UserDto
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -46,9 +47,10 @@ class ChatRepository @Inject constructor(
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             chatRef.set(data, SetOptions.merge()).await()
+            DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "getOrCreateChat ready: chatId=$chatId")
             Result.success(chatId)
         } catch (e: Exception) {
-            android.util.Log.e("ChatRepository", "getOrCreateChat failed: ${e.message}", e)
+            DeckKnobLogger.e(DeckKnobLogger.Tag.FIRESTORE, "getOrCreateChat failed: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -66,7 +68,7 @@ class ChatRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    android.util.Log.w("ChatRepository", "observeMessages error for $chatId: ${error.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "observeMessages error for $chatId: ${error.message}")
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
@@ -112,9 +114,10 @@ class ChatRepository @Inject constructor(
                 )
             ).await()
 
+            DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "Message dispatched in chat $chatId: msgId=${msgRef.id}")
             Result.success(msgRef.id)
         } catch (e: Exception) {
-            android.util.Log.e("ChatRepository", "sendMessage failed: ${e.message}", e)
+            DeckKnobLogger.e(DeckKnobLogger.Tag.FIRESTORE, "sendMessage failed: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -131,7 +134,7 @@ class ChatRepository @Inject constructor(
             .whereArrayContains("participants", myUid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    android.util.Log.w("ChatRepository", "observeUserChats error: ${error.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "observeUserChats error: ${error.message}")
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {

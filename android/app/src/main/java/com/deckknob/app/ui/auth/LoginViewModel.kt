@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.deckknob.app.data.repository.AuthRepository
+import com.deckknob.app.util.DeckKnobLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -33,26 +34,32 @@ class LoginViewModel @Inject constructor(
 
     fun onLoginClick() {
         val trimmed = usernameOrEmail.trim()
+        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "LoginViewModel: onLoginClick initiated for: $trimmed")
         if (trimmed.isBlank() || password.isBlank()) {
             error = "Please fill in all fields."
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Login validation failed: Please fill in all fields.")
             return
         }
 
         // If the user entered an email address with '@', validate format locally
         if (trimmed.contains("@") && !emailRegex.matches(trimmed)) {
             error = "Enter a valid email address."
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Login validation failed: Invalid email format for $trimmed")
             return
         }
 
         viewModelScope.launch {
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "LoginViewModel: dispatching login repository call")
             isLoading = true
             error = null
             resetPasswordSuccessMessage = null
             val result = repository.login(trimmed, password)
             result.onSuccess {
+                DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "LoginViewModel: Login succeeded")
                 loginSuccess = true
             }
             result.onFailure {
+                DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "LoginViewModel: Login failure: ${it.message}")
                 error = it.message ?: "Authentication failed. Please try again."
             }
             isLoading = false
@@ -74,26 +81,32 @@ class LoginViewModel @Inject constructor(
 
     fun sendPasswordReset(emailInput: String? = null) {
         val target = (emailInput ?: forgotPasswordEmail).trim()
+        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "LoginViewModel: sendPasswordReset initiated for: $target")
         if (target.isBlank()) {
             resetPasswordError = "Please enter your email address."
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Password reset validation failed: Empty email address")
             return
         }
 
         if (target.contains("@") && !emailRegex.matches(target)) {
             resetPasswordError = "Enter a valid email address."
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Password reset validation failed: Invalid email format for $target")
             return
         }
 
         viewModelScope.launch {
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "LoginViewModel: dispatching password reset repository call")
             isResetPasswordLoading = true
             resetPasswordError = null
             val result = repository.sendPasswordResetEmail(target)
             result.onSuccess {
+                DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "LoginViewModel: Password reset instructions sent")
                 isForgotPasswordDialogOpen = false
                 resetPasswordSuccessMessage = "Password reset email sent. Please check your inbox and spam folder."
                 error = null
             }
             result.onFailure {
+                DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "LoginViewModel: Password reset failure: ${it.message}")
                 resetPasswordError = it.message ?: "Failed to send reset email. Please try again."
             }
             isResetPasswordLoading = false
@@ -102,21 +115,23 @@ class LoginViewModel @Inject constructor(
 
     fun onGoogleSignInSuccess(idToken: String) {
         viewModelScope.launch {
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "LoginViewModel: onGoogleSignInSuccess initiated")
             isGoogleLoading = true
             error = null
             resetPasswordSuccessMessage = null
             try {
                 val result = repository.signInWithGoogle(idToken)
                 result.onSuccess {
+                    DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "LoginViewModel: Google Sign-In succeeded")
                     loginSuccess = true
                 }
                 result.onFailure {
                     error = it.message ?: "Google Sign-In failed"
-                    android.util.Log.e("DeckKnobAuthDiag", "Stage 11: LoginViewModel Google sign-in failure: ${it::class.java.simpleName}: ${it.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Stage 11: LoginViewModel Google sign-in failure: ${it::class.java.simpleName}: ${it.message}")
                 }
             } catch (e: Exception) {
                 error = e.localizedMessage ?: "Google Sign-In failed"
-                android.util.Log.e("DeckKnobAuthDiag", "Stage 11: LoginViewModel unhandled exception: ${e::class.java.simpleName}: ${e.message}")
+                DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 11: LoginViewModel unhandled exception: ${e::class.java.simpleName}: ${e.message}", e)
             } finally {
                 isGoogleLoading = false
             }

@@ -37,6 +37,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.deckknob.app.data.model.UserDto
+import com.deckknob.app.util.UrlLauncher
 
 private val GENRE_OPTIONS = listOf(
     "Techno", "House", "Afro House", "Electro", "Drum & Bass",
@@ -50,6 +51,7 @@ fun ProfileScreen(
     onBack: (() -> Unit)? = null,
     onSettingsClick: () -> Unit = {},
     onOpenChat: ((String) -> Unit)? = null,
+    onOpenUserProfile: ((String) -> Unit)? = null,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     LaunchedEffect(targetUid) {
@@ -276,10 +278,11 @@ fun ProfileScreen(
                         )
                     }
 
-                    // Social Links Row
+                    // Social Links Row (Feature D & E)
                     val hasSocials = !user?.website.isNullOrEmpty() ||
                             !user?.instagram.isNullOrEmpty() ||
-                            !user?.soundcloud.isNullOrEmpty()
+                            !user?.soundcloud.isNullOrEmpty() ||
+                            !user?.youtube.isNullOrEmpty()
                     if (hasSocials) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
@@ -287,20 +290,39 @@ fun ProfileScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (!user?.website.isNullOrEmpty()) {
-                                SocialChip(label = "Web: ${user.website}", icon = Icons.Default.Language)
+                                SocialChip(
+                                    label = "Website",
+                                    icon = Icons.Default.Language,
+                                    onClick = { UrlLauncher.openUrl(context, user.website, UrlLauncher.Platform.GENERIC) }
+                                )
                             }
                             if (!user?.instagram.isNullOrEmpty()) {
-                                SocialChip(label = "@${user.instagram}", icon = Icons.Default.Share)
+                                SocialChip(
+                                    label = "@${user.instagram}",
+                                    icon = Icons.Default.Share,
+                                    onClick = { UrlLauncher.openUrl(context, user.instagram, UrlLauncher.Platform.INSTAGRAM) }
+                                )
                             }
                             if (!user?.soundcloud.isNullOrEmpty()) {
-                                SocialChip(label = "SoundCloud", icon = Icons.Default.Headphones)
+                                SocialChip(
+                                    label = "SoundCloud",
+                                    icon = Icons.Default.Headphones,
+                                    onClick = { UrlLauncher.openUrl(context, user.soundcloud, UrlLauncher.Platform.SOUNDCLOUD) }
+                                )
+                            }
+                            if (!user?.youtube.isNullOrEmpty()) {
+                                SocialChip(
+                                    label = "YouTube",
+                                    icon = Icons.Default.PlayArrow,
+                                    onClick = { UrlLauncher.openUrl(context, user.youtube, UrlLauncher.Platform.YOUTUBE) }
+                                )
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Stats Counter Bar (Instagram / SoundCloud style)
+                    // Stats Counter Bar (Instagram / SoundCloud style, Feature C)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -315,9 +337,17 @@ fun ProfileScreen(
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFF27272A))
                         StatItem(count = viewModel.userKlyps.size, label = "KLYPS")
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFF27272A))
-                        StatItem(count = user?.followersCount ?: 0, label = "FOLLOWERS")
+                        StatItem(
+                            count = user?.followersCount ?: 0,
+                            label = "FOLLOWERS",
+                            onClick = { viewModel.openFollowersList() }
+                        )
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFF27272A))
-                        StatItem(count = user?.followingCount ?: 0, label = "FOLLOWING")
+                        StatItem(
+                            count = user?.followingCount ?: 0,
+                            label = "FOLLOWING",
+                            onClick = { viewModel.openFollowingList() }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -795,12 +825,50 @@ fun ProfileScreen(
                 onDismiss = { viewModel.showEditProfileDialog = false }
             )
         }
+
+        // Followers / Following Modal Bottom Sheet (Feature C)
+        if (viewModel.showFollowListSheet) {
+            UserFollowListSheet(
+                title = viewModel.followListTitle,
+                users = viewModel.followListUsers,
+                isLoading = viewModel.isLoadingFollowList,
+                error = viewModel.followListError,
+                followingMap = viewModel.followListFollowingMap,
+                activeUid = viewModel.activeViewerUid,
+                onDismiss = { viewModel.showFollowListSheet = false },
+                onOpenProfile = { clickedUid ->
+                    viewModel.showFollowListSheet = false
+                    if (clickedUid != viewModel.currentUser?.uid) {
+                        onOpenUserProfile?.invoke(clickedUid)
+                    }
+                },
+                onToggleFollow = { userToToggle ->
+                    viewModel.toggleFollowInSheet(userToToggle)
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun StatItem(count: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun StatItem(
+    count: Int,
+    label: String,
+    onClick: (() -> Unit)? = null
+) {
+    val modifier = if (onClick != null) {
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    } else {
+        Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+    }
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
             text = count.toString(),
             color = Color.White,
@@ -810,7 +878,7 @@ private fun StatItem(count: Int, label: String) {
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
-            color = Color(0xFFA1A1AA),
+            color = if (onClick != null) Color(0xFFDFE104) else Color(0xFFA1A1AA),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp
@@ -819,13 +887,28 @@ private fun StatItem(count: Int, label: String) {
 }
 
 @Composable
-private fun SocialChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Row(
-        modifier = Modifier
+private fun SocialChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: (() -> Unit)? = null
+) {
+    val modifier = if (onClick != null) {
+        Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF18181B))
             .border(1.dp, Color(0xFF27272A), RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    } else {
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF18181B))
+            .border(1.dp, Color(0xFF27272A), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    }
+
+    Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = Color(0xFFDFE104), modifier = Modifier.size(12.dp))

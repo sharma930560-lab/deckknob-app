@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.util.Log
+import com.deckknob.app.util.DeckKnobLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
@@ -236,7 +236,7 @@ class ReelRepository @Inject constructor(
                 }
                 retriever.release()
             } catch (e: Exception) {
-                Log.w("ReelRepo", "Thumbnail extraction fallback to videoUrl", e)
+                DeckKnobLogger.w(DeckKnobLogger.Tag.MEDIA, "Thumbnail extraction fallback to videoUrl: ${e.message}", e)
             }
             if (posterUrl.isEmpty()) {
                 posterUrl = videoUrl

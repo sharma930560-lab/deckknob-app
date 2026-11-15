@@ -9,8 +9,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,11 +21,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.deckknob.app.ui.theme.DeckKnobBlack
+import com.deckknob.app.ui.theme.DeckKnobYellow
 
 @Composable
 fun OnboardingScreen(
@@ -39,34 +47,45 @@ fun OnboardingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(DeckKnobBlack)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Progress Bar
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (i in 0..3) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(if (i <= viewModel.currentStep) Color(0xFFDFE104) else Color.White.copy(alpha = 0.1f))
+                        .background(if (i <= viewModel.currentStep) DeckKnobYellow else Color.White.copy(alpha = 0.15f))
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-        Crossfade(targetState = viewModel.currentStep, label = "OnboardingSteps") { step ->
-            when (step) {
-                0 -> AvatarStep(viewModel)
-                1 -> CityStep(viewModel)
-                2 -> GenreStep(viewModel)
-                3 -> BioStep(viewModel)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Crossfade(targetState = viewModel.currentStep, label = "OnboardingSteps") { step ->
+                when (step) {
+                    0 -> AvatarStep(viewModel)
+                    1 -> CityStep(viewModel)
+                    2 -> GenreStep(viewModel)
+                    3 -> BioStep(viewModel)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (viewModel.currentStep > 0) {
@@ -109,18 +128,22 @@ fun AvatarStep(viewModel: OnboardingViewModel) {
                 .size(160.dp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.05f))
+                .semantics {
+                    role = Role.Button
+                    contentDescription = if (viewModel.profilePic != null) "Change profile picture" else "Upload profile picture"
+                }
                 .clickable { launcher.launch("image/*") },
             contentAlignment = Alignment.Center
         ) {
             if (viewModel.profilePic != null) {
                 AsyncImage(
                     model = viewModel.profilePic,
-                    contentDescription = null,
+                    contentDescription = "Profile picture preview",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Text("TAP TO UPLOAD", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("TAP TO UPLOAD", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeckKnobYellow)
             }
         }
     }

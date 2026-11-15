@@ -43,6 +43,8 @@ fun RegisterScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DeckKnobBlack)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(24.dp)
     ) {
         Column(
@@ -100,7 +102,7 @@ fun RegisterScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Username taken. Try these:", color = Color.Red, style = MaterialTheme.typography.bodySmall)
                 LazyRow(modifier = Modifier.padding(vertical = 8.dp)) {
-                    items(viewModel.suggestions) { suggestion ->
+                    items(viewModel.suggestions, key = { it }) { suggestion ->
                         SuggestionChip(text = suggestion) {
                             viewModel.onUsernameChange(suggestion)
                         }
@@ -177,17 +179,20 @@ fun SuggestionChip(text: String, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .padding(end = 8.dp)
+            .defaultMinSize(minHeight = 44.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         color = DeckKnobYellow.copy(alpha = 0.1f),
         border = androidx.compose.foundation.BorderStroke(1.dp, DeckKnobYellow.copy(alpha = 0.4f))
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = DeckKnobYellow,
-            fontWeight = FontWeight.Bold
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = DeckKnobYellow,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }

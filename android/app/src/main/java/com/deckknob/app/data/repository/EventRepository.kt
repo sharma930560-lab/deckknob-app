@@ -2,6 +2,7 @@ package com.deckknob.app.data.repository
 
 import android.net.Uri
 import com.deckknob.app.data.model.EventDto
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -29,12 +30,14 @@ class EventRepository @Inject constructor(
             .limit(50)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getEventsFlow snapshot error: ${error.message}")
                     close(error)
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
                     val events = snapshot.toObjects(EventDto::class.java)
                         .filter { it.status != "trashed" }
+                    DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "getEventsFlow received ${events.size} active events")
                     trySend(events)
                 }
             }
@@ -52,8 +55,10 @@ class EventRepository @Inject constructor(
                 .await()
             val events = snapshot.toObjects(EventDto::class.java)
                 .filter { it.status != "trashed" }
+            DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "getEvents fetched ${events.size} active events")
             Result.success(events)
         } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getEvents query failed: ${e.message}", e)
             Result.failure(e)
         }
     }

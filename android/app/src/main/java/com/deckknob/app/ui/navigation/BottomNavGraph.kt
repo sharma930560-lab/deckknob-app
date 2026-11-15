@@ -30,6 +30,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     /** Messages inbox list. Route = "messages" */
     object Messages : Screen("messages", "Messages", Icons.Default.Email)
 
+    /** User search & discovery. Route = "search" */
+    object Search : Screen("search", "Search", Icons.Default.Search)
+
     companion object {
         val Klyps: Screen get() = Reels
     }

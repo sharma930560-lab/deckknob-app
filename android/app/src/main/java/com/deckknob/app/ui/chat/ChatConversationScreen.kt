@@ -143,6 +143,7 @@ fun ChatConversationScreen(
                 color = Color(0xFF18181B),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .imePadding()
             ) {
                 Column {

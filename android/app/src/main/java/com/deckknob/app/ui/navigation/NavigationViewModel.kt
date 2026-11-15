@@ -3,6 +3,7 @@ package com.deckknob.app.ui.navigation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.deckknob.app.data.repository.AuthRepository
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.awaitClose
@@ -35,7 +36,7 @@ class NavigationViewModel @Inject constructor(
     ) { localUid, firebaseUid ->
         val effectiveUid = firebaseUid ?: localUid
         val isAuth = !effectiveUid.isNullOrEmpty()
-        android.util.Log.d("DeckKnobAuthDiag", "Stage 9: Root authentication state changed: isAuthenticated=$isAuth, hasUserId=${!effectiveUid.isNullOrEmpty()}")
+        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 9: Root authentication state changed: isAuthenticated=$isAuth, hasUserId=${!effectiveUid.isNullOrEmpty()}")
         AuthState(isAuthenticated = isAuth, userId = effectiveUid)
     }.stateIn(
         viewModelScope,

@@ -2,6 +2,7 @@ package com.deckknob.app.data.repository
 
 import android.net.Uri
 import com.deckknob.app.data.model.PostDto
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -26,7 +27,7 @@ class PostRepository @Inject constructor(
                 .await()
             val posts = snapshot.toObjects(PostDto::class.java)
 
-            // Inject active user's like state
+            // Inject active user's like and bookmark state
             val currentUid = auth.currentUser?.uid
             if (currentUid != null) {
                 for (post in posts) {
@@ -40,10 +41,107 @@ class PostRepository @Inject constructor(
                         } catch (_: Exception) {
                             // Non-fatal fallback for network delays
                         }
+
+                        try {
+                            val saveSnap = firestore.collection("savedPosts")
+                                .document("${post.id}_${currentUid}")
+                                .get()
+                                .await()
+                            post.isBookmarked = saveSnap.exists()
+                        } catch (_: Exception) {
+                            // Non-fatal fallback
+                        }
                     }
                 }
             }
+            DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "getFeedPosts fetched ${posts.size} posts")
             Result.success(posts)
+        } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getFeedPosts query failed: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun bookmarkPost(postId: String, isBookmarked: Boolean): Result<Unit> {
+        return try {
+            val currentUid = auth.currentUser?.uid ?: throw Exception("User not authenticated")
+            if (postId.isEmpty()) throw Exception("Invalid post ID")
+
+            val saveRef = firestore.collection("savedPosts").document("${postId}_${currentUid}")
+            if (isBookmarked) {
+                val saveData = hashMapOf(
+                    "userId" to currentUid,
+                    "postId" to postId,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                saveRef.set(saveData, SetOptions.merge()).await()
+            } else {
+                saveRef.delete().await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getComments(postId: String): Result<List<com.deckknob.app.data.model.ReelCommentDto>> {
+        return try {
+            if (postId.isEmpty()) return Result.success(emptyList())
+            val snapshot = firestore.collection("posts")
+                .document(postId)
+                .collection("comments")
+                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .get()
+                .await()
+            val comments = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(com.deckknob.app.data.model.ReelCommentDto::class.java)?.copy(id = doc.id)
+            }
+            Result.success(comments)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addComment(postId: String, text: String): Result<com.deckknob.app.data.model.ReelCommentDto> {
+        return try {
+            val user = auth.currentUser ?: throw Exception("User not authenticated")
+            val uid = user.uid
+            if (postId.isEmpty() || text.trim().isEmpty()) throw Exception("Empty comment text")
+
+            val userDoc = firestore.collection("users").document(uid).get().await()
+            val username = userDoc.getString("username") ?: user.displayName ?: "User"
+            val avatar = userDoc.getString("profile_pic") ?: ""
+
+            val commentDocRef = firestore.collection("posts")
+                .document(postId)
+                .collection("comments")
+                .document()
+
+            val commentData = hashMapOf(
+                "authorId" to uid,
+                "author_id" to uid,
+                "authorUsername" to username,
+                "author_username" to username,
+                "authorAvatar" to avatar,
+                "author_avatar" to avatar,
+                "text" to text.trim(),
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+
+            commentDocRef.set(commentData).await()
+
+            firestore.collection("posts").document(postId)
+                .update("comments_count", FieldValue.increment(1))
+                .await()
+
+            val comment = com.deckknob.app.data.model.ReelCommentDto(
+                id = commentDocRef.id,
+                authorId = uid,
+                authorUsername = username,
+                authorAvatar = avatar,
+                text = text.trim()
+            )
+            Result.success(comment)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -87,11 +87,13 @@ fun DJCalendarTabContent(
 
                     if (isOwner) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Privacy Button
+                            // Privacy Button with accessible touch target
                             OutlinedButton(
                                 onClick = { viewModel.showCalendarPrivacyDialog = true },
-                                modifier = Modifier.height(32.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minHeight = 40.dp)
+                                    .heightIn(min = 36.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = Color.White
                                 ),
@@ -103,15 +105,17 @@ fun DJCalendarTabContent(
                                 Text("Privacy", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            // Add Entry Button
+                            // Add Entry Button with accessible touch target
                             Button(
                                 onClick = { viewModel.openAddCalendarEntry() },
-                                modifier = Modifier.height(32.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minHeight = 40.dp)
+                                    .heightIn(min = 36.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = DeckKnobYellow,
                                     contentColor = Color.Black
-                               ),
+                                ),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(14.dp))

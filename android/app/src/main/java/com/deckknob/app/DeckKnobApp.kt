@@ -8,6 +8,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
 import com.deckknob.app.network.DeckKnobMessagingService
+import com.deckknob.app.util.DeckKnobLogger
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -15,6 +16,11 @@ class DeckKnobApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        DeckKnobLogger.installGlobalCrashHandler()
+        DeckKnobLogger.i(
+            DeckKnobLogger.Tag.LIFECYCLE,
+            "DeckKnobApp initialized (versionCode=${BuildConfig.VERSION_CODE}, versionName=${BuildConfig.VERSION_NAME})"
+        )
         createNotificationChannel()
     }
 
@@ -37,6 +43,7 @@ class DeckKnobApp : Application(), ImageLoaderFactory {
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
+            DeckKnobLogger.d(DeckKnobLogger.Tag.PUSH, "FCM notification channel configured: ${DeckKnobMessagingService.CHANNEL_ID}")
         }
     }
 }

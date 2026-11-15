@@ -101,6 +101,89 @@ fun MusicPickerSheet(
     var searchQuery by remember { mutableStateOf("") }
     var selectedGenre by remember { mutableStateOf("All") }
     var playingTrackId by remember { mutableStateOf<String?>(null) }
+    var isBuffering by remember { mutableStateOf(false) }
+    var mediaPlayer by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun stopAndSelect(track: CuratedTrackItem) {
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+        } catch (_: Exception) {}
+        playingTrackId = null
+        isBuffering = false
+        onTrackSelected(
+            MusicDto(
+                id = track.id,
+                title = track.title,
+                artist = track.artist,
+                audioUrl = track.audioUrl,
+                previewUrl = track.audioUrl,
+                duration = track.duration,
+                attribution = "${track.artist} (${track.license})"
+            )
+        )
+        onDismiss()
+    }
+
+    fun togglePreview(track: CuratedTrackItem) {
+        if (playingTrackId == track.id) {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
+            } catch (_: Exception) {}
+            playingTrackId = null
+            isBuffering = false
+        } else {
+            try {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
+            } catch (_: Exception) {}
+            playingTrackId = track.id
+            isBuffering = true
+            try {
+                val player = android.media.MediaPlayer().apply {
+                    setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .build()
+                    )
+                    setDataSource(track.audioUrl)
+                    setOnPreparedListener { mp ->
+                        mp.start()
+                        isBuffering = false
+                    }
+                    setOnCompletionListener {
+                        playingTrackId = null
+                        isBuffering = false
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        playingTrackId = null
+                        isBuffering = false
+                        true
+                    }
+                    prepareAsync()
+                }
+                mediaPlayer = player
+            } catch (e: Exception) {
+                playingTrackId = null
+                isBuffering = false
+            }
+        }
+    }
 
     val genres = listOf("All", "Techno", "House", "Synthwave", "Hard Techno", "Melodic House")
 
@@ -178,19 +261,21 @@ fun MusicPickerSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(genres) { g ->
+                items(genres, key = { it }) { g ->
                     val isSelected = selectedGenre == g
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (isSelected) DeckKnobYellow else Color.White.copy(alpha = 0.08f),
-                        modifier = Modifier.clickable { selectedGenre = g }
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = 36.dp)
+                            .clickable { selectedGenre = g }
                     ) {
                         Text(
                             text = g,
                             color = if (isSelected) DeckKnobBlack else Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                         )
                     }
                 }
@@ -205,26 +290,17 @@ fun MusicPickerSheet(
                     .heightIn(max = 380.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredTracks) { track ->
+                items(filteredTracks, key = { it.id }) { track ->
+                    val isCurrentTrackPlaying = playingTrackId == track.id
+                    val isCurrentTrackBuffering = isCurrentTrackPlaying && isBuffering
+
                     Surface(
-                        color = Color(0xFF18181B),
+                        color = if (isCurrentTrackPlaying) Color(0xFF27272A) else Color(0xFF18181B),
                         shape = RoundedCornerShape(14.dp),
+                        border = if (isCurrentTrackPlaying) androidx.compose.foundation.BorderStroke(1.dp, DeckKnobYellow.copy(alpha = 0.5f)) else null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onTrackSelected(
-                                    MusicDto(
-                                        id = track.id,
-                                        title = track.title,
-                                        artist = track.artist,
-                                        audioUrl = track.audioUrl,
-                                        previewUrl = track.audioUrl,
-                                        duration = track.duration,
-                                        attribution = "${track.artist} (${track.license})"
-                                    )
-                                )
-                                onDismiss()
-                            }
+                            .clickable { togglePreview(track) }
                     ) {
                         Row(
                             modifier = Modifier
@@ -237,25 +313,39 @@ fun MusicPickerSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Box(
+                                // Play / Pause Preview Button
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isCurrentTrackPlaying) DeckKnobYellow else DeckKnobYellow.copy(alpha = 0.15f),
                                     modifier = Modifier
-                                        .size(42.dp)
+                                        .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(DeckKnobYellow.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
+                                        .clickable { togglePreview(track) }
                                 ) {
-                                    Icon(
-                                        Icons.Default.MusicNote,
-                                        contentDescription = null,
-                                        tint = DeckKnobYellow,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (isCurrentTrackBuffering) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                color = DeckKnobBlack,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = if (isCurrentTrackPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isCurrentTrackPlaying) "Pause preview" else "Preview soundtrack",
+                                                tint = if (isCurrentTrackPlaying) DeckKnobBlack else DeckKnobYellow,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
                                 }
+
                                 Spacer(modifier = Modifier.width(12.dp))
+
                                 Column {
                                     Text(
                                         text = track.title,
-                                        color = Color.White,
+                                        color = if (isCurrentTrackPlaying) DeckKnobYellow else Color.White,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )
@@ -268,20 +358,7 @@ fun MusicPickerSheet(
                             }
 
                             Button(
-                                onClick = {
-                                    onTrackSelected(
-                                        MusicDto(
-                                            id = track.id,
-                                            title = track.title,
-                                            artist = track.artist,
-                                            audioUrl = track.audioUrl,
-                                            previewUrl = track.audioUrl,
-                                            duration = track.duration,
-                                            attribution = "${track.artist} (${track.license})"
-                                        )
-                                    )
-                                    onDismiss()
-                                },
+                                onClick = { stopAndSelect(track) },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = DeckKnobYellow,
                                     contentColor = DeckKnobBlack

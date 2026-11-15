@@ -1,4 +1,4 @@
-﻿package com.deckknob.app.ui.feed
+package com.deckknob.app.ui.feed
 
 
 
@@ -110,6 +110,8 @@ fun FeedScreen(
 
     onOpenMessages: () -> Unit = {},
 
+    onOpenSearch: () -> Unit = {},
+
     viewModel: FeedViewModel = hiltViewModel()
 
 ) {
@@ -174,20 +176,46 @@ fun FeedScreen(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
 
+                    // Search / Discover
+                    IconButton(
+                        onClick = onOpenSearch,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search Users",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
                     // Direct Messages
                     IconButton(
                         onClick = onOpenMessages,
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.08f))
+                        modifier = Modifier.size(44.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = "Messages",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Email,
+                                contentDescription = "Messages",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     // Notification Bell
@@ -196,59 +224,69 @@ fun FeedScreen(
 
                         onClick = { viewModel.showNotificationHub = true },
 
-                        modifier = Modifier
-
-                            .size(38.dp)
-
-                            .clip(CircleShape)
-
-                            .background(Color.White.copy(alpha = 0.08f))
+                        modifier = Modifier.size(44.dp)
 
                     ) {
 
-                        BadgedBox(
+                        Box(
 
-                            badge = {
+                            modifier = Modifier
 
-                                if (viewModel.notifications.isNotEmpty()) {
+                                .size(38.dp)
 
-                                    Badge(
+                                .clip(CircleShape)
 
-                                        containerColor = DeckKnobYellow,
+                                .background(Color.White.copy(alpha = 0.08f)),
 
-                                        contentColor = Color.Black
+                            contentAlignment = Alignment.Center
 
-                                    ) {
+                        ) {
 
-                                        Text(
+                            BadgedBox(
 
-                                            text = viewModel.notifications.size.toString(),
+                                badge = {
 
-                                            fontSize = 9.sp,
+                                    if (viewModel.notifications.isNotEmpty()) {
 
-                                            fontWeight = FontWeight.Black
+                                        Badge(
 
-                                        )
+                                            containerColor = DeckKnobYellow,
+
+                                            contentColor = Color.Black
+
+                                        ) {
+
+                                            Text(
+
+                                                text = viewModel.notifications.size.toString(),
+
+                                                fontSize = 9.sp,
+
+                                                fontWeight = FontWeight.Black
+
+                                            )
+
+                                        }
 
                                     }
 
                                 }
 
+                            ) {
+
+                                Icon(
+
+                                    imageVector = Icons.Default.Notifications,
+
+                                    contentDescription = "Notifications",
+
+                                    tint = if (viewModel.notifications.isNotEmpty()) DeckKnobYellow else Color.White,
+
+                                    modifier = Modifier.size(20.dp)
+
+                                )
+
                             }
-
-                        ) {
-
-                            Icon(
-
-                                imageVector = Icons.Default.Notifications,
-
-                                contentDescription = "Notifications",
-
-                                tint = if (viewModel.notifications.isNotEmpty()) DeckKnobYellow else Color.White,
-
-                                modifier = Modifier.size(20.dp)
-
-                            )
 
                         }
 
@@ -262,27 +300,37 @@ fun FeedScreen(
 
                         onClick = onOpenCamera,
 
-                        modifier = Modifier
-
-                            .size(38.dp)
-
-                            .clip(CircleShape)
-
-                            .background(Color.White.copy(alpha = 0.08f))
+                        modifier = Modifier.size(44.dp)
 
                     ) {
 
-                        Icon(
+                        Box(
 
-                            imageVector = Icons.Default.PhotoCamera,
+                            modifier = Modifier
 
-                            contentDescription = "Open Camera",
+                                .size(38.dp)
 
-                            tint = DeckKnobYellow,
+                                .clip(CircleShape)
 
-                            modifier = Modifier.size(20.dp)
+                                .background(Color.White.copy(alpha = 0.08f)),
 
-                        )
+                            contentAlignment = Alignment.Center
+
+                        ) {
+
+                            Icon(
+
+                                imageVector = Icons.Default.PhotoCamera,
+
+                                contentDescription = "Open Camera",
+
+                                tint = DeckKnobYellow,
+
+                                modifier = Modifier.size(20.dp)
+
+                            )
+
+                        }
 
                     }
 
@@ -448,7 +496,7 @@ fun FeedScreen(
 
                     ) {
 
-                        items(GENRE_TABS) { genre ->
+                        items(GENRE_TABS, key = { it }) { genre ->
 
                             val isSelected = viewModel.activeGenre == genre
 
@@ -576,7 +624,7 @@ fun FeedScreen(
 
                             ) {
 
-                                items(viewModel.upcomingEvents) { event ->
+                                items(viewModel.upcomingEvents, key = { it.id }) { event ->
 
                                     UpcomingEventMiniCard(
 
@@ -680,7 +728,7 @@ fun FeedScreen(
 
                             ) {
 
-                                items(viewModel.sceneRadarDjs) { dj ->
+                                items(viewModel.sceneRadarDjs, key = { it.uid }) { dj ->
 
                                     val isFollowed = viewModel.followedDjs.contains(dj.uid)
 
@@ -797,21 +845,15 @@ fun FeedScreen(
                 } else {
 
                     items(viewModel.filteredPosts, key = { it.id }) { post ->
-
                         PostCard(
-
                             post = post,
-
                             onToggleLike = { viewModel.toggleLike(post) },
-
+                            onToggleBookmark = { viewModel.toggleBookmark(post) },
+                            onCommentClick = { viewModel.openComments(post.id) },
                             onOpenAuthorProfile = { authorUid ->
-
                                 if (authorUid.isNotBlank()) onOpenUserProfile(authorUid)
-
                             }
-
                         )
-
                     }
 
                 }
@@ -873,27 +915,26 @@ fun FeedScreen(
 
 
         // Attached Music Soundtrack Picker
-
         if (viewModel.showMusicPicker) {
-
             MusicPickerSheet(
-
                 onTrackSelected = { track ->
-
                     viewModel.newPostMusic = track
-
                     viewModel.showMusicPicker = false
-
                 },
-
                 onDismiss = { viewModel.showMusicPicker = false }
-
             )
-
         }
 
+        // Post Comments Bottom Sheet
+        if (viewModel.activeCommentPostId != null) {
+            val activePost = viewModel.posts.find { it.id == viewModel.activeCommentPostId }
+            PostCommentsSheet(
+                post = activePost,
+                viewModel = viewModel,
+                onDismiss = { viewModel.closeComments() }
+            )
+        }
     }
-
 }
 
 
@@ -1209,17 +1250,14 @@ fun SceneRadarDjCard(
 
 
 @Composable
-
 fun PostCard(
-
     post: PostDto,
-
     onToggleLike: () -> Unit,
-
+    onToggleBookmark: () -> Unit = {},
+    onCommentClick: () -> Unit = {},
     onOpenAuthorProfile: (String) -> Unit = {}
-
 ) {
-
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showBurst by remember { mutableStateOf(false) }
 
     var tapOffset by remember { mutableStateOf<Offset?>(null) }
@@ -1510,48 +1548,60 @@ fun PostCard(
 
 
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-
+            // Comments Button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onCommentClick() }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            ) {
                 Icon(
-
                     imageVector = Icons.Default.ChatBubbleOutline,
-
                     contentDescription = "Comments",
-
                     tint = Color.White,
-
                     modifier = Modifier.size(22.dp)
-
                 )
-
                 Spacer(modifier = Modifier.width(6.dp))
-
                 Text(
-
                     text = "${post.commentsCount}",
-
                     color = Color.White,
-
                     fontSize = 13.sp
-
                 )
-
             }
 
+            // Share Button
+            IconButton(
+                onClick = {
+                    val sendIntent = android.content.Intent().apply {
+                        action = android.content.Intent.ACTION_SEND
+                        putExtra(android.content.Intent.EXTRA_TEXT, "Check out this signal on DECKKNOB: ${post.caption}\nhttps://deckknob.com")
+                        type = "text/plain"
+                    }
+                    context.startActivity(android.content.Intent.createChooser(sendIntent, "Share Signal"))
+                },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = "Share",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-
-            Icon(
-
-                imageVector = Icons.Default.Share,
-
-                contentDescription = "Share",
-
-                tint = Color.White,
-
-                modifier = Modifier.size(20.dp)
-
-            )
-
+            // Bookmark / Save Button
+            IconButton(
+                onClick = onToggleBookmark,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (post.isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = if (post.isBookmarked) "Saved to vault" else "Save to vault",
+                    tint = if (post.isBookmarked) DeckKnobYellow else Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
 
 
@@ -1674,34 +1724,101 @@ fun CreatePostDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // Photo Selection & Visual Thumbnail Preview
+                if (mediaUri != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1E1E22))
+                            .border(1.dp, DeckKnobYellow.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    ) {
+                        AsyncImage(
+                            model = mediaUri,
+                            contentDescription = "Selected Photo Preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
 
+                        // Top & bottom subtle gradient overlays
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Black.copy(alpha = 0.6f),
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.7f)
+                                        )
+                                    )
+                                )
+                        )
 
-                Button(
+                        // Close / Remove Button
+                        IconButton(
+                            onClick = { onMediaSelected(null) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .size(32.dp)
+                                .background(Color.Black.copy(alpha = 0.7f), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                    onClick = { launcher.launch("image/*") },
-
-                    colors = ButtonDefaults.buttonColors(
-
-                        containerColor = if (mediaUri != null) Color(0xFF27272A) else DeckKnobYellow,
-
-                        contentColor = if (mediaUri != null) Color.White else Color.Black
-
-                    ),
-
-                    shape = RoundedCornerShape(8.dp),
-
-                    modifier = Modifier.fillMaxWidth()
-
-                ) {
-
-                    Text(
-
-                        text = if (mediaUri != null) "✓ PHOTO SELECTED" else "SELECT PHOTO FROM GALLERY",
-
-                        fontWeight = FontWeight.Bold
-
-                    )
-
+                        // Change photo badge at bottom left
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.75f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                                .clickable { launcher.launch("image/*") }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = DeckKnobYellow,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "CHANGE PHOTO",
+                                    color = DeckKnobYellow,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { launcher.launch("image/*") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DeckKnobYellow,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "SELECT PHOTO FROM GALLERY",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
 
@@ -1821,16 +1938,168 @@ fun CreatePostDialog(
         },
 
         dismissButton = {
-
             TextButton(onClick = onDismiss) {
-
                 Text("CANCEL", color = Color.Gray)
+            }
+        }
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PostCommentsSheet(
+    post: PostDto?,
+    viewModel: FeedViewModel,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF121214),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .navigationBarsPadding()
+                .imePadding()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "COMMENTS (${post?.commentsCount ?: viewModel.comments.size})",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    letterSpacing = 1.sp,
+                    color = Color.White
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                }
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 160.dp, max = 340.dp)
+                    .padding(vertical = 12.dp)
+            ) {
+                if (viewModel.isLoadingComments) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                        color = DeckKnobYellow
+                    )
+                } else if (viewModel.comments.isEmpty()) {
+                    Text(
+                        text = "No comments yet. Drop the first beat!",
+                        color = Color.Gray,
+                        fontSize = 13.sp,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(viewModel.comments, key = { it.id }) { comment ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF27272A)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (comment.authorAvatar.isNotEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = comment.authorAvatar,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Text(
+                                            text = comment.authorUsername.take(1).uppercase(),
+                                            fontWeight = FontWeight.Bold,
+                                            color = DeckKnobYellow
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "@${comment.authorUsername}",
+                                        color = DeckKnobYellow,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = comment.text,
+                                        color = Color.White,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
+            // Input Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = viewModel.newCommentText,
+                    onValueChange = { viewModel.newCommentText = it },
+                    placeholder = { Text("Add a comment...", color = Color.Gray, fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DeckKnobYellow,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    maxLines = 3
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Button(
+                    onClick = {
+                        post?.id?.let { pid ->
+                            viewModel.addComment(pid, viewModel.newCommentText)
+                        }
+                    },
+                    enabled = !viewModel.isSubmittingComment && viewModel.newCommentText.trim().isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeckKnobYellow,
+                        contentColor = DeckKnobBlack
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    if (viewModel.isSubmittingComment) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = DeckKnobBlack)
+                    } else {
+                        Text("POST", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    }
+                }
+            }
         }
-
-    )
-
+    }
 }
 

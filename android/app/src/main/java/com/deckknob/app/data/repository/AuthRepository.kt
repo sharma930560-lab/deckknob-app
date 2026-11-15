@@ -6,6 +6,7 @@ import com.deckknob.app.data.model.DemoPlaylistDto
 import com.deckknob.app.data.model.UsernameCheckResponse
 import com.deckknob.app.data.model.UsernameMapping
 import com.deckknob.app.data.session.SessionManager
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
@@ -30,10 +31,12 @@ class AuthRepository @Inject constructor(
 
     suspend fun login(usernameOrEmail: String, password: String): Result<UserDto> {
         return try {
+            DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Stage 1: Login attempt started for identifier: $usernameOrEmail")
             var email = usernameOrEmail.trim()
             
             // Resolve email if username is provided
             if (!email.contains("@")) {
+                DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "Resolving username to email: $email")
                 val usernameDoc = firestore.collection("usernames").document(email.lowercase()).get().await()
                 if (usernameDoc.exists()) {
                     val uid = usernameDoc.toObject(UsernameMapping::class.java)?.uid ?: throw Exception("Username lookup failed")
@@ -46,38 +49,41 @@ class AuthRepository @Inject constructor(
 
             val result = auth.signInWithEmailAndPassword(email, password).await()
             val user = result.user ?: throw Exception("Login failed: User null")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 2: Firebase signInWithEmailAndPassword succeeded for UID: ${user.uid}")
             val profile = fetchUserProfile(user.uid) ?: throw Exception("Profile not found")
             
             sessionManager.saveSession(profile)
+            DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Stage 3: Session saved for user ${profile.username} (UID: ${user.uid})")
             Result.success(profile)
         } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Login failed: ${e::class.java.simpleName}: ${e.message}")
             Result.failure(mapFirebaseException(e))
         }
     }
 
     suspend fun signInWithGoogle(idToken: String): Result<UserDto> {
         return try {
-            android.util.Log.d("DeckKnobAuthDiag", "Stage 4: Firebase signInWithCredential() started")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 4: Firebase signInWithCredential() started")
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val result = auth.signInWithCredential(credential).await()
             val user = result.user
             val hasUser = user != null
-            android.util.Log.d("DeckKnobAuthDiag", "Stage 4: Firebase signInWithCredential() completed. User present: $hasUser")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 4: Firebase signInWithCredential() completed. User present: $hasUser")
             if (user == null) throw Exception("Google sign in failed: user is null")
 
             val hasUid = !user.uid.isNullOrBlank()
-            android.util.Log.d("DeckKnobAuthDiag", "Stage 5: Firebase authenticated user UID presence: hasUid=$hasUid")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 5: Firebase authenticated user UID presence: hasUid=$hasUid")
 
             val profile = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                 var prof: UserDto
                 try {
-                    android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup started")
+                    DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "Stage 6: Firestore profile lookup started")
                     val userDoc = firestore.collection("users").document(user.uid).get().await()
                     val profileExists = userDoc.exists()
-                    android.util.Log.d("DeckKnobAuthDiag", "Stage 6: Firestore profile lookup completed. Exists: $profileExists")
+                    DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "Stage 6: Firestore profile lookup completed. Exists: $profileExists")
 
                     if (!profileExists) {
-                        android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation started")
+                        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 7: Profile creation started")
                         var username = (user.email?.split("@")?.getOrNull(0) ?: "dj")
                             .lowercase()
                             .replace(Regex("[^a-z0-9_]"), "")
@@ -91,7 +97,7 @@ class AuthRepository @Inject constructor(
                                 count++
                             }
                         } catch (e: Exception) {
-                            android.util.Log.w("DeckKnobAuthDiag", "Username check non-fatal exception: ${e.message}")
+                            DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "Username check non-fatal exception: ${e.message}")
                         }
 
                         prof = UserDto(
@@ -105,9 +111,9 @@ class AuthRepository @Inject constructor(
                         try {
                             firestore.collection("usernames").document(uniqueUsername).set(UsernameMapping(user.uid)).await()
                         } catch (e: Exception) {
-                            android.util.Log.w("DeckKnobAuthDiag", "Username mapping write non-fatal exception: ${e.message}")
+                            DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "Username mapping write non-fatal exception: ${e.message}")
                         }
-                        android.util.Log.d("DeckKnobAuthDiag", "Stage 7: Profile creation completed")
+                        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 7: Profile creation completed")
                     } else {
                         prof = userDoc.toObject(UserDto::class.java) ?: UserDto(
                             uid = user.uid,
@@ -117,7 +123,7 @@ class AuthRepository @Inject constructor(
                         )
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("DeckKnobAuthDiag", "Stage 6/7: Firestore profile recovery fallback triggered: ${e.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "Stage 6/7: Firestore profile recovery fallback triggered: ${e.message}")
                     val fallbackUsername = (user.email?.split("@")?.getOrNull(0) ?: "dj")
                         .lowercase()
                         .replace(Regex("[^a-z0-9_]"), "")
@@ -131,13 +137,13 @@ class AuthRepository @Inject constructor(
                 }
 
                 sessionManager.saveSession(prof)
-                android.util.Log.d("DeckKnobAuthDiag", "Stage 8: Session persistence completed")
+                DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Stage 8: Session persistence completed for UID: ${user.uid}")
                 prof
             }
             Result.success(profile)
         } catch (e: Exception) {
             if (e is kotlin.coroutines.cancellation.CancellationException) throw e
-            android.util.Log.e("DeckKnobAuthDiag", "Stage 11: AuthRepository caught exception in signInWithGoogle: ${e::class.java.simpleName}, message=${e.message}")
+            DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 11: AuthRepository caught exception in signInWithGoogle: ${e::class.java.simpleName}, message=${e.message}", e)
             Result.failure(mapFirebaseException(e))
         }
     }
@@ -213,10 +219,12 @@ class AuthRepository @Inject constructor(
 
     suspend fun logout() {
         val activeId = sessionManager.activeUserId.first()
+        DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Logout requested (activeUid=$activeId)")
         if (activeId != null) {
             sessionManager.logout(activeId)
         }
         auth.signOut()
+        DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Logout completed: FirebaseAuth and session cleared")
     }
 
     suspend fun switchAccount(uid: String) {
@@ -270,7 +278,7 @@ class AuthRepository @Inject constructor(
                     updates["profile_pic"] = avatarUrl
                     updates["profilePic"] = avatarUrl
                 } catch (e: Exception) {
-                    android.util.Log.w("AuthRepository", "Avatar upload skipped or failed: ${e.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Avatar upload skipped or failed: ${e.message}")
                 }
             }
             if (coverPhotoUri != null) {
@@ -279,7 +287,7 @@ class AuthRepository @Inject constructor(
                     updates["cover_photo"] = coverUrl
                     updates["coverPhoto"] = coverUrl
                 } catch (e: Exception) {
-                    android.util.Log.w("AuthRepository", "Cover photo upload skipped or failed: ${e.message}")
+                    DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Cover photo upload skipped or failed: ${e.message}")
                 }
             }
 
@@ -288,8 +296,10 @@ class AuthRepository @Inject constructor(
             }
             val updatedUser = fetchUserProfile(uid) ?: throw Exception("Failed to fetch updated profile")
             sessionManager.saveSession(updatedUser)
+            DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "User profile updated successfully for UID: $uid")
             Result.success(updatedUser)
         } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "updateUserProfile failed: ${e.message}")
             Result.failure(mapFirebaseException(e))
         }
     }
@@ -331,6 +341,7 @@ class AuthRepository @Inject constructor(
 
     suspend fun sendPasswordResetEmail(emailOrUsername: String): Result<Unit> {
         return try {
+            DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Password reset requested for identifier: $emailOrUsername")
             var email = emailOrUsername.trim()
             if (email.isBlank()) {
                 return Result.failure(Exception("Please enter your email address."))
@@ -355,8 +366,10 @@ class AuthRepository @Inject constructor(
             }
 
             auth.sendPasswordResetEmail(email).await()
+            DeckKnobLogger.i(DeckKnobLogger.Tag.AUTH, "Password reset email dispatched successfully to: $email")
             Result.success(Unit)
         } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.AUTH, "Password reset email failure: ${e.message}")
             Result.failure(mapFirebaseException(e))
         }
     }

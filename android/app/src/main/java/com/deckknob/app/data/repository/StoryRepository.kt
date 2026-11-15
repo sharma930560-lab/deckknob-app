@@ -3,6 +3,7 @@ package com.deckknob.app.data.repository
 import android.net.Uri
 import com.deckknob.app.data.model.MusicDto
 import com.deckknob.app.data.model.StoryDto
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -39,8 +40,10 @@ class StoryRepository @Inject constructor(
                     expiry > System.currentTimeMillis() && (story.createdAt == null || story.createdAt.time >= cutoffMillis)
                 }
             }
+            DeckKnobLogger.d(DeckKnobLogger.Tag.FIRESTORE, "getActiveStories fetched ${stories.size} active stories")
             Result.success(stories)
         } catch (e: Exception) {
+            DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getActiveStories query failed: ${e.message}", e)
             Result.failure(e)
         }
     }

@@ -1,4 +1,4 @@
-﻿package com.deckknob.app.ui.reels
+package com.deckknob.app.ui.reels
 
 import android.content.Context
 import android.content.Intent
@@ -28,6 +28,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.outlined.Whatshot
 import com.deckknob.app.ui.components.FireReactionOverlay
+import com.deckknob.app.util.DeckKnobLogger
 import com.deckknob.app.ui.components.HashtagText
 import com.deckknob.app.ui.components.MusicPickerSheet
 
@@ -114,6 +115,7 @@ fun ReelsScreen(
             val pagerState = rememberPagerState(pageCount = { viewModel.reels.size })
             VerticalPager(
                 state = pagerState,
+                key = { pageIndex -> if (pageIndex in viewModel.reels.indices) viewModel.reels[pageIndex].id else pageIndex },
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val reel = viewModel.reels[page]
@@ -127,14 +129,14 @@ fun ReelsScreen(
             }
         }
 
-        // Global top-right Floating Create (+) button
+        // Global top-right Floating Create (+) button with accessible touch bounds
         FloatingActionButton(
             onClick = { viewModel.showCreateReelDialog = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
                 .padding(top = 12.dp, end = 16.dp)
-                .size(44.dp),
+                .size(48.dp),
             containerColor = DeckKnobYellow,
             contentColor = DeckKnobBlack,
             shape = CircleShape
@@ -203,12 +205,12 @@ fun KlypItem(
                     repeatMode = Player.REPEAT_MODE_ONE
                     addListener(object : Player.Listener {
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                            android.util.Log.w("KlypPlayer", "Video playback error for ${reel.id}: ${error.message}")
+                            DeckKnobLogger.w(DeckKnobLogger.Tag.MEDIA, "ExoPlayer playback error for ${reel.id}: ${error.message}", error)
                         }
                     })
                     prepare()
                 } catch (e: Exception) {
-                    android.util.Log.e("KlypPlayer", "Failed to prepare media for ${reel.id}", e)
+                    DeckKnobLogger.e(DeckKnobLogger.Tag.MEDIA, "Failed to prepare ExoPlayer media for ${reel.id}", e)
                 }
             }
         } else null

@@ -46,6 +46,8 @@ import com.deckknob.app.ui.profile.ProfileScreen
 
 import com.deckknob.app.ui.reels.ReelsScreen
 
+import com.deckknob.app.ui.search.SearchScreen
+
 import com.deckknob.app.ui.settings.SettingsScreen
 
 
@@ -130,7 +132,9 @@ fun MainScreen(
 
                     onNavigateToEvents = { navController.navigate(Screen.Events.route) },
 
-                    onOpenMessages = { navController.navigate(Screen.Messages.route) }
+                    onOpenMessages = { navController.navigate(Screen.Messages.route) },
+
+                    onOpenSearch = { navController.navigate(Screen.Search.route) }
 
                 )
 
@@ -208,6 +212,12 @@ fun MainScreen(
 
                         navController.navigate(Screen.Chat.createRoute(targetUid))
 
+                    },
+
+                    onOpenUserProfile = { uid ->
+
+                        navController.navigate(Screen.UserProfile.createRoute(uid))
+
                     }
 
                 )
@@ -284,6 +294,13 @@ fun MainScreen(
 
             }
 
+            composable(Screen.Search.route) {
+                SearchScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenUserProfile = { uid -> navController.navigate(Screen.UserProfile.createRoute(uid)) }
+                )
+            }
+
             composable(Screen.Camera.route) {
 
                 CameraScreen(
@@ -335,6 +352,12 @@ fun MainScreen(
                     onOpenChat = { targetUid ->
 
                         navController.navigate(Screen.Chat.createRoute(targetUid))
+
+                    },
+
+                    onOpenUserProfile = { targetUid ->
+
+                        navController.navigate(Screen.UserProfile.createRoute(targetUid))
 
                     }
 

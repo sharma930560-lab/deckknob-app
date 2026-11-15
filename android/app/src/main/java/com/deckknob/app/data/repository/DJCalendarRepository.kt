@@ -3,6 +3,7 @@ package com.deckknob.app.data.repository
 import com.deckknob.app.data.model.CalendarAccessResult
 import com.deckknob.app.data.model.DJCalendarEntry
 import com.deckknob.app.data.model.DJCalendarSettings
+import com.deckknob.app.util.DeckKnobLogger
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -37,7 +38,7 @@ class DJCalendarRepository @Inject constructor(
         } catch (e: Exception) {
             // PERMISSION_DENIED means rules are not yet deployed — default to private safely
             if (e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                android.util.Log.w("DJCalendar", "getCalendarSettings: PERMISSION_DENIED for $djUid — rules pending deployment, defaulting to private")
+                DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getCalendarSettings: PERMISSION_DENIED for $djUid — rules pending deployment, defaulting to private")
             }
             DJCalendarSettings(djUid = djUid, privacy = "private")
         }
@@ -173,7 +174,7 @@ class DJCalendarRepository @Inject constructor(
             // PERMISSION_DENIED = Firestore rules for djCalendars not yet deployed.
             // Show Restricted (private) instead of a raw error message to the user.
             if (e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                android.util.Log.w("DJCalendar", "getCalendarEntries: PERMISSION_DENIED for djUid=$djUid — rules pending deployment")
+                DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getCalendarEntries: PERMISSION_DENIED for djUid=$djUid — rules pending deployment")
                 return CalendarAccessResult.Restricted(
                     reason = "rules_pending",
                     privacy = "private"

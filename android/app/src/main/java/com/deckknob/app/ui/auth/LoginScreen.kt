@@ -1,7 +1,7 @@
 package com.deckknob.app.ui.auth
 
 import android.app.Activity
-import android.util.Log
+import com.deckknob.app.util.DeckKnobLogger
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -52,9 +52,9 @@ fun LoginScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        Log.d("DeckKnobAuthDiag", "Stage 2: Google activity result received. ResultCode: ${result.resultCode}, hasData: ${result.data != null}")
+        DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 2: Google activity result received. ResultCode: ${result.resultCode}, hasData: ${result.data != null}")
         if (result.data == null) {
-            Log.d("DeckKnobAuthDiag", "Stage 2: Activity result data is null (cancelled without intent)")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 2: Activity result data is null (cancelled without intent)")
             return@rememberLauncherForActivityResult
         }
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
@@ -62,18 +62,18 @@ fun LoginScreen(
             val account = task.getResult(ApiException::class.java)
             val idToken = account.idToken
             val hasToken = !idToken.isNullOrBlank()
-            Log.d("DeckKnobAuthDiag", "Stage 3: Google ID token retrieval completed. Token present: $hasToken")
+            DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 3: Google ID token retrieval completed. Token present: $hasToken")
             if (hasToken) {
                 viewModel.onGoogleSignInSuccess(idToken!!)
             } else {
-                Log.e("DeckKnobAuthDiag", "Stage 3: Token is null or blank")
+                DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 3: Token is null or blank")
                 viewModel.onGoogleSignInError("Google account selected, but no ID token was returned.")
             }
         } catch (e: ApiException) {
-            Log.e("DeckKnobAuthDiag", "Stage 11: Caught ApiException: statusCode=${e.statusCode}, message=${e.message}")
+            DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 11: Caught ApiException: statusCode=${e.statusCode}, message=${e.message}", e)
             when (e.statusCode) {
                 GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> {
-                    Log.d("DeckKnobAuthDiag", "Google Sign-In cancelled by user")
+                    DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Google Sign-In cancelled by user")
                 }
                 GoogleSignInStatusCodes.NETWORK_ERROR -> {
                     viewModel.onGoogleSignInError("Unable to connect. Check your internet and try again.")
@@ -87,7 +87,7 @@ fun LoginScreen(
                 }
             }
         } catch (e: Exception) {
-            Log.e("DeckKnobAuthDiag", "Stage 11: Caught exception: ${e::class.java.simpleName}, message=${e.message}")
+            DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 11: Caught exception: ${e::class.java.simpleName}, message=${e.message}", e)
             viewModel.onGoogleSignInError(e.localizedMessage ?: "Google sign-in failed")
         }
     }
@@ -169,23 +169,28 @@ fun LoginScreen(
             
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Right-aligned "Forgot password?" text action
+            // Right-aligned "Forgot password?" text action with accessible touch target
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                Text(
-                    text = "Forgot password?",
-                    color = DeckKnobYellow,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Box(
                     modifier = Modifier
+                        .defaultMinSize(minHeight = 44.dp, minWidth = 48.dp)
                         .clickable(
                             enabled = !viewModel.isLoading && !viewModel.isGoogleLoading && !viewModel.isResetPasswordLoading,
                             onClick = { viewModel.onForgotPasswordClick() }
                         )
-                        .padding(vertical = 4.dp, horizontal = 2.dp)
-                )
+                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Text(
+                        text = "Forgot password?",
+                        color = DeckKnobYellow,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -327,7 +332,7 @@ fun LoginScreen(
                         webClientId.contains("placeholder", ignoreCase = true) ||
                         webClientId == "408445559473-web.apps.googleusercontent.com"
 
-                    Log.d("DeckKnobAuthDiag", "Stage 1: Google sign-in button tapped. WebClientId present: ${!webClientId.isNullOrBlank()}, isPlaceholder: $isPlaceholder")
+                    DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 1: Google sign-in button tapped. WebClientId present: ${!webClientId.isNullOrBlank()}, isPlaceholder: $isPlaceholder")
 
                     if (webClientId.isNullOrBlank() || isPlaceholder) {
                         val certType = if (com.deckknob.app.BuildConfig.DEBUG) "debug" else "production release"
@@ -345,7 +350,7 @@ fun LoginScreen(
                             googleSignInLauncher.launch(client.signInIntent)
                         }
                     } catch (e: Exception) {
-                        Log.e("DeckKnobAuthDiag", "Stage 11: Error building GoogleSignInOptions: ${e.message}")
+                        DeckKnobLogger.e(DeckKnobLogger.Tag.AUTH, "Stage 11: Error building GoogleSignInOptions: ${e.message}", e)
                         viewModel.onGoogleSignInError("Failed to initialize Google Sign-In: ${e.localizedMessage}")
                     }
                 },

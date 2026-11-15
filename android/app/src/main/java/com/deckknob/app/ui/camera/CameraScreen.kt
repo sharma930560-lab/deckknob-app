@@ -29,6 +29,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -147,15 +151,20 @@ fun CameraScreen(
                         Icon(flashIcon, contentDescription = "Flash", tint = if (viewModel.flashMode != ImageCapture.FLASH_MODE_OFF) DeckKnobYellow else Color.White)
                     }
 
-                    // Lens Flip
+                    // Lens Flip with accessible touch bounds
                     IconButton(
                         onClick = { viewModel.toggleLens() },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                        modifier = Modifier.size(44.dp)
                     ) {
-                        Icon(Icons.Default.FlipCameraAndroid, contentDescription = "Flip Lens", tint = Color.White)
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.FlipCameraAndroid, contentDescription = "Flip Lens", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -196,7 +205,7 @@ fun CameraScreen(
                         Icon(Icons.Default.PhotoLibrary, contentDescription = "Open Gallery", tint = Color.White)
                     }
 
-                    // Main Instagram-Style Shutter Button
+                    // Main Instagram-Style Shutter Button with accessibility semantics
                     Box(
                         modifier = Modifier
                             .size(84.dp)
@@ -204,6 +213,10 @@ fun CameraScreen(
                             .padding(6.dp)
                             .clip(CircleShape)
                             .background(Color.White)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "Capture photo shutter"
+                            }
                             .clickable {
                                 // Capture photo or simulated frame
                                 val file = File(
