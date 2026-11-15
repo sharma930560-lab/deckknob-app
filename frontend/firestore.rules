@@ -221,30 +221,81 @@ service cloud.firestore {
     }
 
     // ── Mentions, Music, Reviews, CheckIns, Hashtags ───────
+    // Mentions: public read; create requires author attribution; update/delete restricted to author
     match /mentions/{mentionId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        ('authorId' in request.resource.data && request.resource.data.authorId == request.auth.uid) ||
+        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.authorId == request.auth.uid && request.resource.data.authorId == resource.data.authorId) ||
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId)
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        resource.data.userId == request.auth.uid
+      );
     }
 
+    // Music: public read; creator can upload original sounds; creator can update/delete their own tracks
     match /music/{musicId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid) ||
+        ('attribution' in request.resource.data && request.resource.data.attribution.matches('.*' + request.auth.uid + '.*'))
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid &&
+        (!('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId)
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        ('attribution' in resource.data && resource.data.attribution.matches('.*' + request.auth.uid + '.*'))
+      );
     }
 
+    // Venue Reviews: public read; create requires authorId attribution; update/delete restricted to review author
     match /venueReviews/{reviewId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        ('authorId' in request.resource.data && request.resource.data.authorId == request.auth.uid) ||
+        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.authorId == request.auth.uid && request.resource.data.authorId == resource.data.authorId) ||
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId)
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // Check-ins: public read; create requires userId attribution; update/delete restricted to check-in owner
+    match /checkIns/{checkInId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
-    match /checkIns/{checkInId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
-    }
-
+    // Hashtags: public read; create requires creator attribution; immutable once indexed
     match /hashtags/{tagId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        ('createdBy' in request.resource.data && request.resource.data.createdBy == request.auth.uid) ||
+        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.createdBy == request.auth.uid && request.resource.data.createdBy == resource.data.createdBy) ||
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId)
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.userId == request.auth.uid
+      );
     }
 
     // ── Blocked Users ─────────────────────────────────────
