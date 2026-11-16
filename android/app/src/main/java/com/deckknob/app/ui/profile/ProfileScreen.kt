@@ -333,7 +333,7 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StatItem(count = viewModel.userPosts.size, label = "POSTS")
+                        StatItem(count = maxOf(viewModel.userPosts.size, user?.postsCount ?: 0), label = "POSTS")
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFF27272A))
                         StatItem(count = viewModel.userKlyps.size, label = "KLYPS")
                         VerticalDivider(modifier = Modifier.height(28.dp), color = Color(0xFF27272A))

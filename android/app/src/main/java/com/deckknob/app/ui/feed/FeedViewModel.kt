@@ -31,8 +31,11 @@ class FeedViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth,
     private val socialRepository: SocialRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val remoteConfigRepository: com.deckknob.app.data.repository.RemoteConfigRepository
 ) : ViewModel() {
+
+    val remoteConfig: kotlinx.coroutines.flow.StateFlow<com.deckknob.app.data.model.update.RemoteAppConfig> = remoteConfigRepository.config
 
     var posts by mutableStateOf<List<PostDto>>(emptyList())
     var isLoading by mutableStateOf(false)
@@ -128,7 +131,9 @@ class FeedViewModel @Inject constructor(
                 for (doc in snap.documents) {
                     val user = doc.toObject(UserDto::class.java)?.copy(uid = doc.id)
                     if (user != null && user.uid != currentUid) {
-                        djs.add(user)
+                        val followers = doc.getLong("followersCount")?.toInt() ?: doc.getLong("followers_count")?.toInt() ?: user.followersCount
+                        val following = doc.getLong("followingCount")?.toInt() ?: doc.getLong("following_count")?.toInt() ?: user.followingCount
+                        djs.add(user.copy(followersCount = followers, followingCount = following))
                     }
                 }
                 sceneRadarDjs = djs

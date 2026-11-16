@@ -6,10 +6,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +35,9 @@ import java.util.*
 fun InboxScreen(
     onBack: () -> Unit,
     onOpenChat: (String) -> Unit,
+    onOpenGroupChat: (String) -> Unit,
+    onOpenCreateGroup: () -> Unit,
+    onOpenSearch: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     LaunchedEffect(Unit) {
@@ -61,9 +68,34 @@ fun InboxScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Search Users",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(onClick = onOpenCreateGroup) {
+                        Icon(
+                            Icons.Default.GroupAdd,
+                            contentDescription = "New Group",
+                            tint = Color(0xFFDFE104)
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF09090B)
                 )
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onOpenCreateGroup,
+                containerColor = Color(0xFFDFE104),
+                contentColor = Color.Black,
+                icon = { Icon(Icons.Default.GroupAdd, contentDescription = null) },
+                text = { Text("New Group", fontWeight = FontWeight.Bold) }
             )
         },
         containerColor = Color(0xFF09090B)
@@ -91,10 +123,20 @@ fun InboxScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Connect with DJs and artists by visiting their profile",
+                        text = "Connect with DJs, artists, or start a new group",
                         color = Color.Gray,
                         fontSize = 13.sp
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onOpenCreateGroup,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF27272A)),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(Icons.Default.GroupAdd, contentDescription = null, tint = Color(0xFFDFE104), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Create a Group", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         } else {
@@ -104,64 +146,58 @@ fun InboxScreen(
                     .padding(paddingValues)
             ) {
                 items(chats, key = { it.id }) { chat ->
-                    val otherUid = chat.participants.firstOrNull { it != viewModel.currentUserId } ?: ""
-                    val otherUser = chat.otherUser
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (otherUid.isNotBlank()) {
-                                    onOpenChat(otherUid)
+                    if (chat.isGroup) {
+                        // Group Chat Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenGroupChat(chat.id) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF27272A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!chat.imageUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = chat.imageUrl,
+                                        contentDescription = chat.name,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Groups,
+                                        contentDescription = null,
+                                        tint = Color(0xFFDFE104),
+                                        modifier = Modifier.size(28.dp)
+                                    )
                                 }
                             }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF27272A)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (!otherUser?.profilePic.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = otherUser?.profilePic,
-                                    contentDescription = otherUser?.username,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = otherUser?.name?.ifBlank { otherUser.username } ?: (if (otherUid.isNotBlank()) "@$otherUid" else "Unknown"),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (otherUser?.role == "dj") {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = chat.name ?: "Group Chat",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
                                         color = Color(0xFFDFE104),
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                        shape = RoundedCornerShape(4.dp)
                                     ) {
                                         Text(
-                                            text = "DJ",
+                                            text = "GROUP",
                                             color = Color.Black,
                                             fontWeight = FontWeight.Black,
                                             fontSize = 9.sp,
@@ -169,26 +205,115 @@ fun InboxScreen(
                                         )
                                     }
                                 }
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = chat.lastMessage ?: "Group created",
+                                    color = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) Color.White else Color.Gray,
+                                    fontWeight = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) FontWeight.SemiBold else FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Text(
-                                text = chat.lastMessage ?: "Started a chat",
-                                color = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) Color.White else Color.Gray,
-                                fontWeight = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) FontWeight.SemiBold else FontWeight.Normal,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (chat.lastMessageAt != null) {
+                                Text(
+                                    text = dateFormat.format(chat.lastMessageAt.toDate()),
+                                    color = Color(0xFF71717A),
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
+                    } else {
+                        // Direct Chat Row
+                        val otherUid = chat.participants.firstOrNull { it != viewModel.currentUserId } ?: ""
+                        val otherUser = chat.otherUser
 
-                        if (chat.lastMessageAt != null) {
-                            Text(
-                                text = dateFormat.format(chat.lastMessageAt.toDate()),
-                                color = Color(0xFF71717A),
-                                fontSize = 11.sp
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (otherUid.isNotBlank()) {
+                                        onOpenChat(otherUid)
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF27272A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!otherUser?.profilePic.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = otherUser?.profilePic,
+                                        contentDescription = otherUser?.username,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = otherUser?.name?.ifBlank { otherUser.username } ?: (if (otherUid.isNotBlank()) "@$otherUid" else "Unknown"),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (otherUser?.role == "dj") {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            color = Color(0xFFDFE104),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "DJ",
+                                                color = Color.Black,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = chat.lastMessage ?: "Started a chat",
+                                    color = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) Color.White else Color.Gray,
+                                    fontWeight = if (chat.lastSenderId != viewModel.currentUserId && !chat.readBy.contains(viewModel.currentUserId)) FontWeight.SemiBold else FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            if (chat.lastMessageAt != null) {
+                                Text(
+                                    text = dateFormat.format(chat.lastMessageAt.toDate()),
+                                    color = Color(0xFF71717A),
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                     HorizontalDivider(color = Color(0xFF18181B), thickness = 0.5.dp)
@@ -197,4 +322,3 @@ fun InboxScreen(
         }
     }
 }
-

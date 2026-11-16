@@ -30,8 +30,24 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     /** Messages inbox list. Route = "messages" */
     object Messages : Screen("messages", "Messages", Icons.Default.Email)
 
+    /** Group conversation. Route = "group_chat/{groupId}" */
+    object GroupChat : Screen("group_chat/{groupId}", "Group Chat", Icons.Default.Email) {
+        fun createRoute(groupId: String) = if (groupId.isNotBlank()) "group_chat/$groupId" else "messages"
+    }
+
+    /** Create new group chat. Route = "create_group" */
+    object CreateGroup : Screen("create_group", "New Group", Icons.Default.Add)
+
+    /** Group details & settings. Route = "group_details/{groupId}" */
+    object GroupDetails : Screen("group_details/{groupId}", "Group Details", Icons.Default.Info) {
+        fun createRoute(groupId: String) = if (groupId.isNotBlank()) "group_details/$groupId" else "messages"
+    }
+
     /** User search & discovery. Route = "search" */
     object Search : Screen("search", "Search", Icons.Default.Search)
+
+    /** In-App OTA Update Center & Release Management. Route = "update_center" */
+    object UpdateCenter : Screen("update_center", "App Updates", Icons.Default.SystemUpdate)
 
     companion object {
         val Klyps: Screen get() = Reels

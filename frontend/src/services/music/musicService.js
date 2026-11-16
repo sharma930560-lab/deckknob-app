@@ -323,6 +323,7 @@ export const unifiedMusicService = {
         key: metadata.key || 'C minor',
         artwork: metadata.artwork || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=300&q=80',
         audioUrl,
+        userId,
         provider: 'creator_upload',
         licenseType: 'Original Creator Sound',
         attribution: 'Uploaded by user ' + userId,

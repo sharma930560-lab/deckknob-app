@@ -115,11 +115,25 @@ class AuthRepository @Inject constructor(
                         }
                         DeckKnobLogger.d(DeckKnobLogger.Tag.AUTH, "Stage 7: Profile creation completed")
                     } else {
-                        prof = userDoc.toObject(UserDto::class.java) ?: UserDto(
+                        val parsed = userDoc.toObject(UserDto::class.java)
+                        val followers = userDoc.getLong("followersCount")?.toInt() ?: userDoc.getLong("followers_count")?.toInt() ?: parsed?.followersCount ?: 0
+                        val following = userDoc.getLong("followingCount")?.toInt() ?: userDoc.getLong("following_count")?.toInt() ?: parsed?.followingCount ?: 0
+                        val posts = userDoc.getLong("postsCount")?.toInt() ?: userDoc.getLong("posts_count")?.toInt() ?: parsed?.postsCount ?: 0
+                        prof = parsed?.copy(
+                            profilePic = userDoc.getString("profilePic") ?: userDoc.getString("profile_pic") ?: parsed.profilePic,
+                            coverPhoto = userDoc.getString("coverPhoto") ?: userDoc.getString("cover_photo") ?: parsed.coverPhoto,
+                            name = userDoc.getString("name") ?: userDoc.getString("displayName") ?: parsed.name,
+                            followersCount = followers,
+                            followingCount = following,
+                            postsCount = posts
+                        ) ?: UserDto(
                             uid = user.uid,
                             username = userDoc.getString("username") ?: "user",
                             email = user.email ?: "",
-                            profilePic = userDoc.getString("profile_pic") ?: user.photoUrl?.toString() ?: ""
+                            profilePic = userDoc.getString("profile_pic") ?: userDoc.getString("profilePic") ?: user.photoUrl?.toString() ?: "",
+                            followersCount = followers,
+                            followingCount = following,
+                            postsCount = posts
                         )
                     }
                 } catch (e: Exception) {
@@ -204,10 +218,16 @@ class AuthRepository @Inject constructor(
                 val profilePic = doc.getString("profilePic") ?: doc.getString("profile_pic") ?: user.profilePic
                 val coverPhoto = doc.getString("coverPhoto") ?: doc.getString("cover_photo") ?: user.coverPhoto
                 val name = doc.getString("name") ?: doc.getString("displayName") ?: user.name
+                val followers = doc.getLong("followersCount")?.toInt() ?: doc.getLong("followers_count")?.toInt() ?: user.followersCount
+                val following = doc.getLong("followingCount")?.toInt() ?: doc.getLong("following_count")?.toInt() ?: user.followingCount
+                val posts = doc.getLong("postsCount")?.toInt() ?: doc.getLong("posts_count")?.toInt() ?: user.postsCount
                 user.copy(
                     profilePic = profilePic,
                     coverPhoto = coverPhoto,
-                    name = name
+                    name = name,
+                    followersCount = followers,
+                    followingCount = following,
+                    postsCount = posts
                 )
             } else {
                 null

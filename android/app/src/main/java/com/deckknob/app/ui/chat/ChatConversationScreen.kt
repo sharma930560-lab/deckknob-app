@@ -137,14 +137,103 @@ fun ChatConversationScreen(
             )
         },
         containerColor = Color(0xFF09090B),
-        bottomBar = {
-            // Message Input Bar
+        contentWindowInsets = WindowInsets.statusBars
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .imePadding()
+        ) {
+            // Independent scrolling message history filling available space
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (viewModel.isLoading && messages.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFFDFE104))
+                    }
+                } else if (messages.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Say hello to @${recipient?.username ?: "artist"}!",
+                                color = Color.Gray,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Direct messages are end-to-end between participants",
+                                color = Color(0xFF52525B),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(messages, key = { it.id }) { msg ->
+                            val isMine = msg.senderId == viewModel.currentUserId
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(
+                                        topStart = 16.dp,
+                                        topEnd = 16.dp,
+                                        bottomStart = if (isMine) 16.dp else 4.dp,
+                                        bottomEnd = if (isMine) 4.dp else 16.dp
+                                    ),
+                                    color = if (isMine) Color(0xFFDFE104) else Color(0xFF27272A),
+                                    modifier = Modifier.widthIn(max = 280.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        Text(
+                                            text = msg.text,
+                                            color = if (isMine) Color.Black else Color.White,
+                                            fontSize = 14.sp
+                                        )
+                                        if (msg.createdAt != null) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = timeFormat.format(msg.createdAt.toDate()),
+                                                color = if (isMine) Color(0x99000000) else Color(0xFF71717A),
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.align(Alignment.End)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Message Composer anchored immediately above keyboard / navigation bar
             Surface(
                 color = Color(0xFF18181B),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .imePadding()
+                    .windowInsetsPadding(
+                        WindowInsets.navigationBars.exclude(WindowInsets.ime)
+                    )
             ) {
                 Column {
                     if (viewModel.errorMessage != null) {
@@ -214,92 +303,5 @@ fun ChatConversationScreen(
                 }
             }
         }
-    ) { paddingValues ->
-        if (viewModel.isLoading && messages.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = Color(0xFFDFE104))
-            }
-        } else if (messages.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Say hello to @${recipient?.username ?: "artist"}!",
-                        color = Color.Gray,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Direct messages are end-to-end between participants",
-                        color = Color(0xFF52525B),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages, key = { it.id }) { msg ->
-                    val isMine = msg.senderId == viewModel.currentUserId
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
-                    ) {
-                        Column(
-                            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .widthIn(max = 280.dp)
-                                    .background(
-                                        color = if (isMine) Color(0xFFDFE104) else Color(0xFF27272A),
-                                        shape = RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (isMine) 16.dp else 4.dp,
-                                            bottomEnd = if (isMine) 4.dp else 16.dp
-                                        )
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = msg.text,
-                                    color = if (isMine) Color(0xFF09090B) else Color.White,
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
-                                )
-                            }
-
-                            if (msg.createdAt != null) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = timeFormat.format(msg.createdAt.toDate()),
-                                    color = Color(0xFF71717A),
-                                    fontSize = 10.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
-

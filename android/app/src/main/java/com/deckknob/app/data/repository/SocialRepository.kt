@@ -362,15 +362,17 @@ class SocialRepository @Inject constructor(
     suspend fun getFollowers(targetUid: String): Result<List<UserDto>> {
         if (targetUid.isBlank()) return Result.success(emptyList())
         return try {
-            val snap = firestore.collection("followers")
+            val coll = firestore.collection("followers")
                 .document(targetUid)
                 .collection("userFollowers")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .limit(50)
-                .get()
-                .await()
+            val snap = try {
+                coll.orderBy("createdAt", Query.Direction.DESCENDING).limit(50).get().await()
+            } catch (e: Exception) {
+                coll.limit(50).get().await()
+            }
+            val docs = if (snap.isEmpty) coll.limit(50).get().await().documents else snap.documents
 
-            val uids = snap.documents.map { doc ->
+            val uids = docs.map { doc ->
                 doc.getString("followerUid") ?: doc.getString("followerId") ?: doc.id
             }.filter { it.isNotBlank() }
 
@@ -392,15 +394,17 @@ class SocialRepository @Inject constructor(
     suspend fun getFollowing(targetUid: String): Result<List<UserDto>> {
         if (targetUid.isBlank()) return Result.success(emptyList())
         return try {
-            val snap = firestore.collection("following")
+            val coll = firestore.collection("following")
                 .document(targetUid)
                 .collection("userFollowing")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .limit(50)
-                .get()
-                .await()
+            val snap = try {
+                coll.orderBy("createdAt", Query.Direction.DESCENDING).limit(50).get().await()
+            } catch (e: Exception) {
+                coll.limit(50).get().await()
+            }
+            val docs = if (snap.isEmpty) coll.limit(50).get().await().documents else snap.documents
 
-            val uids = snap.documents.map { doc ->
+            val uids = docs.map { doc ->
                 doc.getString("targetUid") ?: doc.id
             }.filter { it.isNotBlank() }
 
@@ -422,6 +426,40 @@ class SocialRepository @Inject constructor(
         } catch (e: Exception) {
             DeckKnobLogger.w(DeckKnobLogger.Tag.FIRESTORE, "getFollowing failed for $targetUid: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Authoritative live count of followers from subcollection.
+     */
+    suspend fun getFollowerCount(targetUid: String): Int {
+        if (targetUid.isBlank()) return 0
+        return try {
+            val snap = firestore.collection("followers")
+                .document(targetUid)
+                .collection("userFollowers")
+                .get()
+                .await()
+            snap.size()
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * Authoritative live count of following from subcollection.
+     */
+    suspend fun getFollowingCount(targetUid: String): Int {
+        if (targetUid.isBlank()) return 0
+        return try {
+            val snap = firestore.collection("following")
+                .document(targetUid)
+                .collection("userFollowing")
+                .get()
+                .await()
+            snap.size()
+        } catch (e: Exception) {
+            0
         }
     }
 }

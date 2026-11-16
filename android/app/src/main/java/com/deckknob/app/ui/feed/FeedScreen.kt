@@ -73,6 +73,7 @@ import com.deckknob.app.data.model.EventDto
 import com.deckknob.app.data.model.PostDto
 
 import com.deckknob.app.data.model.UserDto
+import com.deckknob.app.ui.components.AnnouncementBanner
 
 import com.deckknob.app.ui.components.DeckKnobLogo
 
@@ -351,6 +352,12 @@ fun FeedScreen(
                 contentPadding = PaddingValues(bottom = 80.dp)
 
             ) {
+
+                // Remote Announcement Banner (OTA Configurable)
+                item {
+                    val remoteConfig by viewModel.remoteConfig.collectAsState()
+                    AnnouncementBanner(bannerConfig = remoteConfig.announcementBanner)
+                }
 
                 // 1. Editorial Hero Banner (Website Parity)
 

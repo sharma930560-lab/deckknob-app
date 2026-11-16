@@ -22,9 +22,9 @@ data class UserDto(
     val youtube: String = "",
     @get:PropertyName("is_private") @set:PropertyName("is_private") var isPrivate: Boolean = false,
     @get:PropertyName("hide_likes") @set:PropertyName("hide_likes") var hideLikes: Boolean = false,
-    @get:PropertyName("followers_count") @set:PropertyName("followers_count") var followersCount: Int = 0,
-    @get:PropertyName("following_count") @set:PropertyName("following_count") var followingCount: Int = 0,
-    @get:PropertyName("posts_count") @set:PropertyName("posts_count") var postsCount: Int = 0,
+    var followersCount: Int = 0,
+    var followingCount: Int = 0,
+    var postsCount: Int = 0,
     @get:PropertyName("demoPlaylists") @set:PropertyName("demoPlaylists") var demoPlaylists: List<DemoPlaylistDto> = emptyList(),
     var accessToken: String? = ""
 )

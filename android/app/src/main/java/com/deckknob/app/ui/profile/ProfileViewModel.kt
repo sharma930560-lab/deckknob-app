@@ -164,6 +164,21 @@ class ProfileViewModel @Inject constructor(
                 if (isOtherUser && activeUid != null) {
                     isFollowingUser = djCalendarRepository.isFollowing(activeUid, uidToLoad)
                 }
+
+                // Authoritative Live Count Hydration from follow graph
+                launch {
+                    val liveFollowers = socialRepository.getFollowerCount(uidToLoad)
+                    val liveFollowing = socialRepository.getFollowingCount(uidToLoad)
+                    val currentProf = currentUser
+                    if (currentProf != null && currentProf.uid == uidToLoad) {
+                        val finalFollowers = if (liveFollowers > 0 || currentProf.followersCount == 0) liveFollowers else currentProf.followersCount
+                        val finalFollowing = if (liveFollowing > 0 || currentProf.followingCount == 0) liveFollowing else currentProf.followingCount
+                        currentUser = currentProf.copy(
+                            followersCount = finalFollowers,
+                            followingCount = finalFollowing
+                        )
+                    }
+                }
             }
             isLoading = false
         }
@@ -232,6 +247,13 @@ class ProfileViewModel @Inject constructor(
                 onSuccess = { users ->
                     followListUsers = users
                     isLoadingFollowList = false
+                    if (currentUser?.uid == targetUid) {
+                        currentUser = if (isFollowers) {
+                            currentUser?.copy(followersCount = users.size)
+                        } else {
+                            currentUser?.copy(followingCount = users.size)
+                        }
+                    }
                     val viewer = activeViewerUid
                     if (viewer != null) {
                         for (u in users) {

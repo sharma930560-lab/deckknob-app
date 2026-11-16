@@ -34,6 +34,7 @@ import com.deckknob.app.data.model.UserDto
 fun SettingsScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onNavigateToUpdates: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val user = viewModel.currentUser
@@ -213,6 +214,13 @@ fun SettingsScreen(
 
             // SECTION 3: SUPPORT & LEGAL
             SectionHeader("Support & Community")
+
+            SettingsRow(
+                icon = Icons.Default.SystemUpdate,
+                title = "App Updates",
+                subtitle = "In-app updates, release notes & remote features",
+                onClick = onNavigateToUpdates
+            )
 
             SettingsRow(
                 icon = Icons.AutoMirrored.Filled.HelpOutline,
